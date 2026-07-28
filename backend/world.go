@@ -2,7 +2,7 @@
 World state model; Boxes, Container (grid), box queue
 */
 
-package world
+package backend
 
 import "errors"
 
@@ -34,6 +34,22 @@ type Container struct {
 	width      int
 	cells      [][]int // Cells[y][x] contains a box ID or EmptyCell
 	placements map[int]BoxPlacement
+}
+
+func (c *Container) Height() int {
+	return c.height
+}
+
+func (c *Container) Width() int {
+	return c.width
+}
+
+func (c *Container) Cell(x, y int) (int, error) {
+	if x < 0 || y < 0 || x >= c.width|| y >= c.height {
+		return EmptyCell, errors.New("cell coordinates out of bounds")
+	}
+
+	return c.cells[y][x], nil
 }
 
 func NewContainer(height, width int) (*Container, error) {
