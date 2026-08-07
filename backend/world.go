@@ -118,6 +118,54 @@ func (c *Container) Place(box Box, x, y int) error {
 	return nil
 }
 
+func (c *Container) CanFitDimensions(width, height int) bool {
+	if c == nil || width <= 0 || height <= 0 {
+		return false
+	}
+
+	if height > c.height || width > c.width {
+		return false
+	}
+
+	// occupiedPrefix[y][x] stores the number of occupied cells in the
+	// rectangle from (0, 0) up to, but not including, (x, y).
+	occupiedPrefix := make([][]int, c.height+1)
+	for y := range occupiedPrefix {
+		occupiedPrefix[y] = make([]int, c.width+1)
+	}
+
+	for y := 1; y <= c.height; y++ {
+		for x := 1; x <= c.width; x++ {
+			occupied := 0
+			if c.cells[y-1][x-1] != EmptyCell {
+				occupied = 1
+			}
+
+			occupiedPrefix[y][x] = occupied +
+				occupiedPrefix[y-1][x] +
+				occupiedPrefix[y][x-1] -
+				occupiedPrefix[y-1][x-1]
+		}
+	}
+
+	for y := 0; y <= c.height-height; y++ {
+		for x := 0; x <= c.width-width; x++ {
+			bottom := y + height
+			right := x + width
+			occupied := occupiedPrefix[bottom][right] -
+				occupiedPrefix[y][right] -
+				occupiedPrefix[bottom][x] +
+				occupiedPrefix[y][x]
+
+			if occupied == 0 {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // The queue of boxes to be placed into a Container
 type BoxQueue struct {
 	Items []QueuedBox
