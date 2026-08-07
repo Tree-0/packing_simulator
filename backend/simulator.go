@@ -79,7 +79,7 @@ func (eng *SimulationEngine) World() *World {
 }
 
 func (eng *SimulationEngine) UniformBoxDistribution() UniformBoxDistribution {
-	return eng.generator.BoxDistribution()
+	return eng.distribution
 }
 
 // Run generates one box per iteration and processes boxes whenever the queue

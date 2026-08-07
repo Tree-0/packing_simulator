@@ -91,7 +91,18 @@ func main() {
 	if result.StoppedEarly {
 		fmt.Println("Simulation stopped because no box in a batch could be placed.")
 	}
-	fmt.Printf("Container utilization: %.1f%%\n\n", 100*backend.EvaluateSimulation(engine, backend.ContainerUtilization))
+
+	fmt.Println("Evaluations:")
+	for _, evalType := range backend.AllEvaluationTypes() {
+		value := backend.EvaluateSimulation(engine, evalType)
+		switch evalType {
+		case backend.ContainerUtilization, backend.FutureFitProbabilityMetric:
+			fmt.Printf("  %-24s %.1f%%\n", evalType, 100*value)
+		default:
+			fmt.Printf("  %-24s %.4f\n", evalType, value)
+		}
+	}
+	fmt.Println()
 
 	if *animate < 0 {
 		if err := printContainer(&engine.World().Container); err != nil {

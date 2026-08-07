@@ -12,6 +12,27 @@ const (
 	FutureFitProbabilityMetric // Requires a box-size distribution.
 )
 
+func AllEvaluationTypes() []EvaluationType {
+	return []EvaluationType{
+		ContainerUtilization,
+		ContainerFragmentation,
+		FutureFitProbabilityMetric,
+	}
+}
+
+func (evalType EvaluationType) String() string {
+	switch evalType {
+	case ContainerUtilization:
+		return "Container utilization"
+	case ContainerFragmentation:
+		return "Container fragmentation"
+	case FutureFitProbabilityMetric:
+		return "Future fit probability"
+	default:
+		return "Unknown evaluation"
+	}
+}
+
 // EvaluateSimulation evaluates the simulation's current world.
 func EvaluateSimulation(sim *SimulationEngine, evalType EvaluationType) float64 {
 	if sim == nil {
@@ -20,7 +41,7 @@ func EvaluateSimulation(sim *SimulationEngine, evalType EvaluationType) float64 
 	switch evalType {
 	case FutureFitProbabilityMetric:
 		return FutureFitProbability(
-			sim.World(), 
+			sim.World(),
 			sim.UniformBoxDistribution())
 	}
 	return EvaluateWorld(sim.World(), evalType)
