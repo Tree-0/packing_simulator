@@ -69,28 +69,38 @@ type FragmentationMetrics struct {
 	FragmentationScore float64
 }
 
-// the number of "islands" of unused packing space
+// Fragmentation measures the distinct four-directionally connected regions of
+// unused packing space.
 func Fragmentation(world *World) FragmentationMetrics {
+	if world == nil {
+		return FragmentationMetrics{}
+	}
+
 	container := &world.Container
 	total := container.Height() * container.Width()
 	if total == 0 {
-		return FragmentationMetrics{
-			RegionCount:        0,
-			LargestRegionRatio: 0,
-			FragmentationScore: 0,
-		}
+		return FragmentationMetrics{}
 	}
 
-	cellQueue := []Point{}
 	visitedCells := make(map[Point]struct{})
 
 	fragments := 0
 	emptyCells := 0
 	fragmentSizes := make([]int, 0)
+	directions := [...]Point{
+		{X: 0, Y: 1},
+		{X: 0, Y: -1},
+		{X: 1, Y: 0},
+		{X: -1, Y: 0},
+	}
 
 	// bfs from each tile to find distinct packing gaps
 	for y := 0; y < container.Height(); y++ {
 		for x := 0; x < container.Width(); x++ {
+			start := Point{X: x, Y: y}
+			if _, seen := visitedCells[start]; seen {
+				continue
+			}
 
 			// don't explore occupied cells
 			cell, err := container.Cell(x, y)
@@ -99,62 +109,61 @@ func Fragmentation(world *World) FragmentationMetrics {
 			}
 
 			// found the start of a new empty fragment
-			fragments += 1
+			fragments++
 			currFragmentSize := 0
-			cellQueue = append(cellQueue, Point{x, y})
+			cellQueue := []Point{start}
+			visitedCells[start] = struct{}{}
 
-			for len(cellQueue) > 0 {
-				cell_point := cellQueue[0]
-				cell_val, err := container.Cell(cell_point.X, cell_point.Y)
-				cellQueue = cellQueue[1:]
-
-				if err != nil {
-					// print something or return early? shouldn't be getting errors
-					// and I want to propagate it
-				}
-
-				_, seen := visitedCells[cell_point]
-				if seen || cell_val != EmptyCell {
-					continue
-				}
-
-				visitedCells[cell_point] = struct{}{}
-
+			for queueIndex := 0; queueIndex < len(cellQueue); queueIndex++ {
+				cellPoint := cellQueue[queueIndex]
 				// new contiguous empty cell is part of this fragment
-				currFragmentSize += 1
-				emptyCells += 1
-
-				dirx := []int{0, 0, 1, -1}
-				diry := []int{1, -1, 0, 0}
+				currFragmentSize++
+				emptyCells++
 
 				// explore in-range neighbors.
-				for i := 0; i < len(dirx); i++ {
-					next := Point{cell_point.X + dirx[i], cell_point.Y + diry[i]}
-					if InContainer(container, next) {
-						cellQueue = append(cellQueue, next)
+				for _, direction := range directions {
+					next := Point{X: cellPoint.X + direction.X, Y: cellPoint.Y + direction.Y}
+					if !InContainer(container, next) {
+						continue
 					}
-				}
+					if _, seen := visitedCells[next]; seen {
+						continue
+					}
 
+					nextCell, err := container.Cell(next.X, next.Y)
+					if err != nil || nextCell != EmptyCell {
+						continue
+					}
+
+					visitedCells[next] = struct{}{}
+					cellQueue = append(cellQueue, next)
+				}
 			}
 
 			fragmentSizes = append(fragmentSizes, currFragmentSize)
 		}
 	}
 
-	squaredFragmentSum := 0
-	for i := 0; i < len(fragmentSizes); i++ {
-		squaredFragmentSum += fragmentSizes[i] * fragmentSizes[i]
+	squaredFragmentSum := float64(0)
+	largestFragment := 0
+	for _, fragmentSize := range fragmentSizes {
+		squaredFragmentSum += float64(fragmentSize) * float64(fragmentSize)
+		if fragmentSize > largestFragment {
+			largestFragment = fragmentSize
+		}
 	}
 
-	fragmentation := float64(0)
+	fragmentation := 0.0
+	largestRegionRatio := 0.0
 	if emptyCells > 0 {
-		fragmentation = 1 - (float64(squaredFragmentSum) / float64(emptyCells*emptyCells))
+		emptyCellCount := float64(emptyCells)
+		fragmentation = 1 - squaredFragmentSum/(emptyCellCount*emptyCellCount)
+		largestRegionRatio = float64(largestFragment) / emptyCellCount
 	}
 
 	return FragmentationMetrics{
 		RegionCount:        fragments,
-		LargestRegionRatio: -1,
+		LargestRegionRatio: largestRegionRatio,
 		FragmentationScore: fragmentation,
 	}
-
 }
