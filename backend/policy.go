@@ -5,8 +5,7 @@ Policies to determine how objects are placed into the packing simulation
 package backend
 
 type PlacementDecision struct {
-	X int
-	Y int
+	Point Point
 }
 
 type Policy interface {
@@ -29,7 +28,7 @@ func (BottomLeftPolicy) FindPlacement(container *Container, box Box) (PlacementD
 	for y := container.Height() - box.Height; y >= 0; y-- {
 		for x := 0; x <= container.Width()-box.Width; x++ {
 			if container.CanPlace(box, x, y) {
-				return PlacementDecision{X: x, Y: y}, true
+				return PlacementDecision{Point: Point{X: x, Y: y}}, true
 			}
 		}
 	}

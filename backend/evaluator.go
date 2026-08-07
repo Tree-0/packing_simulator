@@ -30,6 +30,7 @@ func EvaluateWorld(world *World, evalType EvaluationType) float64 {
 	case ContainerUtilization:
 		return Utilization(world)
 	case ContainerFragmentation:
+		// ignores the other metrics returned by Fragmentation score for now...
 		return Fragmentation(world).FragmentationScore
 	default:
 		return 0
