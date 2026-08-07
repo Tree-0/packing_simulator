@@ -11,12 +11,11 @@ Run randomized simulations over time, observe how each policy performs with each
 ### Structure
 
 - `backend/`
-    - `simulator.go`: Owns time and event processing
-    - `world.go`: The simulation model space - grid, placed boxes, queue
-    - `generator.go`: Creates box-arrival events
-
-    - `policy/`: Different packing policies
-
-    - `evaluator`: measures policy performance
+    - `simulator`: Owns time and event processing
+    - `world`: The simulation model space - grid, placed boxes, queue
+    - `generator`: Creates box-arrival events
+    - `policy`: Different packing policies
+    - `evaluator`: Measures policy performance
 
 - `frontend/`: Observe and display state
+- `main.go`: Simulation entry point
