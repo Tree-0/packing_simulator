@@ -34,8 +34,9 @@ type SimulationResult struct {
 type StepObserver func(timestamp int, world *World) error
 
 type SimulationEngine struct {
-	world     *World
-	generator BoxGenerator
+	world        *World
+	generator    BoxGenerator
+	distribution UniformBoxDistribution
 }
 
 func NewSimulationEngine(config SimulationConfig) (*SimulationEngine, error) {
@@ -46,6 +47,13 @@ func NewSimulationEngine(config SimulationConfig) (*SimulationEngine, error) {
 	world, err := NewWorld(config.ContainerHeight, config.ContainerWidth, config.QueueSize)
 	if err != nil {
 		return nil, err
+	}
+
+	distribution := UniformBoxDistribution{
+		MinWidth:  config.MinBoxWidth,
+		MaxWidth:  config.MaxBoxWidth,
+		MinHeight: config.MinBoxHeight,
+		MaxHeight: config.MaxBoxHeight,
 	}
 
 	generator, err := NewRandomBoxGenerator(
@@ -60,13 +68,18 @@ func NewSimulationEngine(config SimulationConfig) (*SimulationEngine, error) {
 	}
 
 	return &SimulationEngine{
-		world:     world,
-		generator: generator,
+		world:        world,
+		generator:    generator,
+		distribution: distribution,
 	}, nil
 }
 
 func (eng *SimulationEngine) World() *World {
 	return eng.world
+}
+
+func (eng *SimulationEngine) UniformBoxDistribution() UniformBoxDistribution {
+	return eng.generator.BoxDistribution()
 }
 
 // Run generates one box per iteration and processes boxes whenever the queue

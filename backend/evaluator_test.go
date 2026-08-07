@@ -139,6 +139,26 @@ func TestFragmentationEvaluatorEdgeCases(t *testing.T) {
 	}
 }
 
+func TestFutureFitProbability(t *testing.T) {
+	world := newTestWorld(t, 3, 3)
+	if err := world.Container.Place(Box{ID: 1, Width: 1, Height: 1}, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	got := FutureFitProbability(world, UniformBoxDistribution{
+		MinWidth:  1,
+		MaxWidth:  2,
+		MinHeight: 1,
+		MaxHeight: 2,
+	})
+
+	// Sizes 1x1, 1x2, and 2x1 fit. Every 2x2 square includes the center cell.
+	const want = 3.0 / 4.0
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("FutureFitProbability() = %.12f; want %.12f", got, want)
+	}
+}
+
 func newTestWorld(t *testing.T, height, width int) *World {
 	t.Helper()
 

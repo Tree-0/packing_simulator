@@ -11,13 +11,18 @@ import (
 
 type BoxGenerator interface {
 	Next(arrivedAt int) QueuedBox
+	BoxDistribution() UniformBoxDistribution
+}
+
+type UniformBoxDistribution struct {
+	MinWidth, MaxWidth   int
+	MinHeight, MaxHeight int
 }
 
 type RandomBoxGenerator struct {
-	rng                  *rand.Rand
-	minWidth, maxWidth   int
-	minHeight, maxHeight int
-	nextID               int
+	rng             *rand.Rand
+	boxDistribution UniformBoxDistribution
+	nextID          int
 }
 
 func NewRandomBoxGenerator(
@@ -33,18 +38,21 @@ func NewRandomBoxGenerator(
 	}
 
 	return &RandomBoxGenerator{
-		rng:       rand.New(rand.NewSource(seed)),
-		minWidth:  minWidth,
-		maxWidth:  maxWidth,
-		minHeight: minHeight,
-		maxHeight: maxHeight,
-		nextID:    1,
+		rng: rand.New(rand.NewSource(seed)),
+		boxDistribution: UniformBoxDistribution{
+			MinWidth:  minWidth,
+			MaxWidth:  maxWidth,
+			MinHeight: minHeight,
+			MaxHeight: maxHeight,
+		},
+		nextID: 1,
 	}, nil
 }
 
 func (g *RandomBoxGenerator) Next(t int) QueuedBox {
-	width := g.minWidth + g.rng.Intn(g.maxWidth-g.minWidth+1)
-	height := g.minHeight + g.rng.Intn(g.maxHeight-g.minHeight+1)
+	dist := g.boxDistribution
+	width := dist.MinWidth + g.rng.Intn(dist.MaxWidth-dist.MinWidth+1)
+	height := dist.MinHeight + g.rng.Intn(dist.MaxHeight-dist.MinHeight+1)
 
 	box := Box{
 		ID:     g.nextID,
@@ -54,4 +62,8 @@ func (g *RandomBoxGenerator) Next(t int) QueuedBox {
 	g.nextID++
 
 	return QueuedBox{Box: box, ArrivedAt: t}
+}
+
+func (g *RandomBoxGenerator) BoxDistribution() UniformBoxDistribution {
+	return g.boxDistribution
 }
