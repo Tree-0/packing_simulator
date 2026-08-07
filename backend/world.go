@@ -45,7 +45,7 @@ func (c *Container) Width() int {
 }
 
 func (c *Container) Cell(x, y int) (int, error) {
-	if x < 0 || y < 0 || x >= c.width|| y >= c.height {
+	if x < 0 || y < 0 || x >= c.width || y >= c.height {
 		return EmptyCell, errors.New("cell coordinates out of bounds")
 	}
 
@@ -102,6 +102,7 @@ func (c *Container) Place(box Box, x, y int) error {
 		return errors.New("invalid placement")
 	}
 
+	// Fill the cells corresponding to the placement
 	for cellY := y; cellY < y+box.Height; cellY++ {
 		for cellX := x; cellX < x+box.Width; cellX++ {
 			c.cells[cellY][cellX] = box.ID
@@ -120,10 +121,49 @@ func (c *Container) Place(box Box, x, y int) error {
 // The queue of boxes to be placed into a Container
 type BoxQueue struct {
 	Items []QueuedBox
+	Limit int
+}
+
+func (q *BoxQueue) Full() bool {
+	return len(q.Items) >= q.Limit
+}
+
+func (q *BoxQueue) Enqueue(box QueuedBox) bool {
+	if q.Full() {
+		return false
+	}
+
+	q.Items = append(q.Items, box)
+	return true
+}
+
+func (q *BoxQueue) Drain() []QueuedBox {
+	batch := q.Items
+	q.Items = make([]QueuedBox, 0, q.Limit)
+	return batch
 }
 
 // The full world state model
 type World struct {
 	Container Container
 	Queue     BoxQueue
+}
+
+func NewWorld(height, width int, queueSize int) (*World, error) {
+	if queueSize <= 0 {
+		return nil, errors.New("queue size must be positive")
+	}
+
+	container, err := NewContainer(height, width)
+	if err != nil {
+		return nil, err
+	}
+
+	return &World{
+		Container: *container,
+		Queue: BoxQueue{
+			Items: make([]QueuedBox, 0, queueSize),
+			Limit: queueSize,
+		},
+	}, nil
 }
