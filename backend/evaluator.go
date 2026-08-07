@@ -4,7 +4,6 @@ Objective functions to evaluate the performance of a packing policy via various 
 
 package backend
 
-
 type EvaluationType int
 
 const (
@@ -39,9 +38,8 @@ func EvaluateWorld(world *World, evalType EvaluationType) float64 {
 }
 
 func InContainer(c *Container, p Point) bool {
-	return 0 <= p.X && p.X < c.Width() && 0 <= p.Y && p.Y < c.Height();
+	return 0 <= p.X && p.X < c.Width() && 0 <= p.Y && p.Y < c.Height()
 }
-
 
 // ratio of used cells : total cells
 func Utilization(world *World) float64 {
@@ -66,7 +64,7 @@ func Utilization(world *World) float64 {
 }
 
 type FragmentationMetrics struct {
-	RegionCount int
+	RegionCount        int
 	LargestRegionRatio float64
 	FragmentationScore float64
 }
@@ -76,8 +74,8 @@ func Fragmentation(world *World) FragmentationMetrics {
 	container := &world.Container
 	total := container.Height() * container.Width()
 	if total == 0 {
-		return FragmentationMetrics {
-			RegionCount: 0,
+		return FragmentationMetrics{
+			RegionCount:        0,
 			LargestRegionRatio: 0,
 			FragmentationScore: 0,
 		}
@@ -95,7 +93,7 @@ func Fragmentation(world *World) FragmentationMetrics {
 		for x := 0; x < container.Width(); x++ {
 
 			// don't explore occupied cells
-			cell, err := container.Cell(x,y)
+			cell, err := container.Cell(x, y)
 			if err != nil || cell != EmptyCell {
 				continue
 			}
@@ -121,18 +119,18 @@ func Fragmentation(world *World) FragmentationMetrics {
 				}
 
 				visitedCells[cell_point] = struct{}{}
-				
+
 				// new contiguous empty cell is part of this fragment
 				currFragmentSize += 1
 				emptyCells += 1
 
-				dirx := []int{0,0,1,-1}
-				diry := []int{1,-1,0,0}
-				
+				dirx := []int{0, 0, 1, -1}
+				diry := []int{1, -1, 0, 0}
+
 				// explore in-range neighbors.
 				for i := 0; i < len(dirx); i++ {
 					next := Point{cell_point.X + dirx[i], cell_point.Y + diry[i]}
-					if InContainer(container, next){
+					if InContainer(container, next) {
 						cellQueue = append(cellQueue, next)
 					}
 				}
@@ -147,14 +145,14 @@ func Fragmentation(world *World) FragmentationMetrics {
 	for i := 0; i < len(fragmentSizes); i++ {
 		squaredFragmentSum += fragmentSizes[i] * fragmentSizes[i]
 	}
-	
+
 	fragmentation := float64(0)
 	if emptyCells > 0 {
-		fragmentation = 1 - (float64(squaredFragmentSum) / float64(emptyCells * emptyCells))
+		fragmentation = 1 - (float64(squaredFragmentSum) / float64(emptyCells*emptyCells))
 	}
 
-	return FragmentationMetrics {
-		RegionCount: fragments,
+	return FragmentationMetrics{
+		RegionCount:        fragments,
 		LargestRegionRatio: -1,
 		FragmentationScore: fragmentation,
 	}

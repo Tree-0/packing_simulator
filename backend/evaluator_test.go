@@ -24,7 +24,7 @@ func TestFragmentationEvaluator(t *testing.T) {
 	fragmentation := Fragmentation(world)
 
 	// 0 1 0
-	// 0 1 1 
+	// 0 1 1
 	// 0 1 0
 
 	// 1 - (3^2 + 1^2 + 1^2) / (5 ^ 2)

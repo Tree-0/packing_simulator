@@ -140,8 +140,8 @@ func (eng *SimulationEngine) processBatch(p Policy, batch []QueuedBox) (int, err
 		}
 
 		if err := eng.world.Container.Place(
-			queued.Box, 
-			decision.Point.X, 
+			queued.Box,
+			decision.Point.X,
 			decision.Point.Y,
 		); err != nil {
 			return placed, fmt.Errorf("policy %q produced an invalid placement for box %d: %w", p.Name(), queued.Box.ID, err)
