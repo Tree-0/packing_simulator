@@ -123,17 +123,29 @@ func (c *Container) CanFitDimensions(width, height int) bool {
 		return false
 	}
 
-	if height > c.height || width > c.width {
-		return false
+	return newOccupancyIndex(c).canFitDimensions(width, height)
+}
+
+// occupancyIndex answers empty-rectangle queries for one immutable container
+// state. It must be rebuilt after the container changes.
+type occupancyIndex struct {
+	width  int
+	height int
+	prefix [][]int
+}
+
+func newOccupancyIndex(c *Container) occupancyIndex {
+	index := occupancyIndex{
+		width:  c.width,
+		height: c.height,
+		prefix: make([][]int, c.height+1),
+	}
+	for y := range index.prefix {
+		index.prefix[y] = make([]int, c.width+1)
 	}
 
-	// occupiedPrefix[y][x] stores the number of occupied cells in the
-	// rectangle from (0, 0) up to, but not including, (x, y).
-	occupiedPrefix := make([][]int, c.height+1)
-	for y := range occupiedPrefix {
-		occupiedPrefix[y] = make([]int, c.width+1)
-	}
-
+	// prefix[y][x] stores the number of occupied cells in the rectangle from
+	// (0, 0) up to, but not including, (x, y).
 	for y := 1; y <= c.height; y++ {
 		for x := 1; x <= c.width; x++ {
 			occupied := 0
@@ -141,21 +153,29 @@ func (c *Container) CanFitDimensions(width, height int) bool {
 				occupied = 1
 			}
 
-			occupiedPrefix[y][x] = occupied +
-				occupiedPrefix[y-1][x] +
-				occupiedPrefix[y][x-1] -
-				occupiedPrefix[y-1][x-1]
+			index.prefix[y][x] = occupied +
+				index.prefix[y-1][x] +
+				index.prefix[y][x-1] -
+				index.prefix[y-1][x-1]
 		}
 	}
 
-	for y := 0; y <= c.height-height; y++ {
-		for x := 0; x <= c.width-width; x++ {
+	return index
+}
+
+func (index occupancyIndex) canFitDimensions(width, height int) bool {
+	if width <= 0 || height <= 0 || height > index.height || width > index.width {
+		return false
+	}
+
+	for y := 0; y <= index.height-height; y++ {
+		for x := 0; x <= index.width-width; x++ {
 			bottom := y + height
 			right := x + width
-			occupied := occupiedPrefix[bottom][right] -
-				occupiedPrefix[y][right] -
-				occupiedPrefix[bottom][x] +
-				occupiedPrefix[y][x]
+			occupied := index.prefix[bottom][right] -
+				index.prefix[y][right] -
+				index.prefix[bottom][x] +
+				index.prefix[y][x]
 
 			if occupied == 0 {
 				return true
