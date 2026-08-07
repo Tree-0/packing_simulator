@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   verify:
+    name: vet, test
     runs-on: ubuntu-latest
 
     steps:
