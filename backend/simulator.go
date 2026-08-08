@@ -146,6 +146,9 @@ func (eng *SimulationEngine) RunWithObserver(
 
 func (eng *SimulationEngine) processBatch(p Policy, batch []QueuedBox) (int, error) {
 	placed := 0
+
+	p.OrderBatch(batch)
+
 	for _, queued := range batch {
 		decision, found := p.FindPlacement(&eng.world.Container, queued.Box)
 		if !found {

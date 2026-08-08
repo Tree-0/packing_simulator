@@ -20,6 +20,7 @@ func main() {
 	iterations := flag.Int("iterations", 50, "maximum number of boxes to generate")
 	seed := flag.Int64("seed", time.Now().UnixNano(), "random seed; defaults to a new seed each run")
 	animate := flag.Int("animate", -1, "animate each timestamp with this delay in milliseconds; omit to disable")
+	policyName := flag.String("policy", backend.BottomLeftPolicyName, "packing policy: bottom-left or largest-area-bottom-left")
 
 	flag.Parse()
 
@@ -41,7 +42,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	policy := backend.BottomLeftPolicy{}
+	policy, err := backend.NewPolicy(*policyName)
+	if err != nil {
+		log.Fatal(err)
+	}
 	var result backend.SimulationResult
 	if *animate >= 0 {
 		firstFrame := true
