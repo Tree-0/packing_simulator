@@ -9,6 +9,8 @@ type EvaluationType int
 const (
 	ContainerUtilization EvaluationType = iota
 	ContainerFragmentation
+	AreaWeightedContainerFragmentation // Lower is better
+	ContainerCompactness // higher is better
 	FutureFitProbabilityMetric // Requires a box-size distribution.
 )
 
@@ -16,6 +18,8 @@ func AllEvaluationTypes() []EvaluationType {
 	return []EvaluationType{
 		ContainerUtilization,
 		ContainerFragmentation,
+		AreaWeightedContainerFragmentation,
+		ContainerCompactness,
 		FutureFitProbabilityMetric,
 	}
 }
@@ -26,6 +30,10 @@ func (evalType EvaluationType) String() string {
 		return "Container utilization"
 	case ContainerFragmentation:
 		return "Container fragmentation"
+	case AreaWeightedContainerFragmentation:
+		return "Area-weighted fragmentation"
+	case ContainerCompactness:
+		return "Compactness"
 	case FutureFitProbabilityMetric:
 		return "Future fit probability"
 	default:
@@ -58,6 +66,10 @@ func EvaluateWorld(world *World, evalType EvaluationType) float64 {
 	case ContainerFragmentation:
 		// ignores the other metrics returned by Fragmentation score for now...
 		return Fragmentation(world).FragmentationScore
+	case AreaWeightedContainerFragmentation:
+		return AreaWeightedFragmentation(world)
+	case ContainerCompactness:
+		return Compactness(world)
 	default:
 		return 0
 	}

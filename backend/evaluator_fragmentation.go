@@ -4,6 +4,7 @@ type FragmentationMetrics struct {
 	RegionCount        int
 	LargestRegionRatio float64
 	FragmentationScore float64
+	EmptyCells 		   int
 }
 
 // Fragmentation measures the distinct four-directionally connected regions of
@@ -102,5 +103,24 @@ func Fragmentation(world *World) FragmentationMetrics {
 		RegionCount:        fragments,
 		LargestRegionRatio: largestRegionRatio,
 		FragmentationScore: fragmentation,
+		EmptyCells: 		emptyCells,
 	}
+}
+
+func AreaWeightedFragmentation(world *World) float64 {
+
+	fragmentation := Fragmentation(world)
+	totalCells := world.Container.Height() * world.Container.Width()
+	emptyFraction := float64(fragmentation.EmptyCells) / float64(totalCells)
+
+	// a very small number of empty cells will reduce the impact
+	// of those cells being highly fragmented
+	return (emptyFraction * fragmentation.FragmentationScore)
+
+}
+
+// complement to AreaWeightedFragmentation.
+// Larger value indicates better score.
+func Compactness(world *World) float64 {
+	return 1 - AreaWeightedFragmentation(world)
 }
