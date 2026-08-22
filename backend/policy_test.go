@@ -56,6 +56,184 @@ func TestNewPolicy(t *testing.T) {
 	}
 }
 
+func TestBottomLeftPolicyOnlyRotatedOrientationFits(t *testing.T) {
+	container, err := NewContainer(1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// rotating is the only way to fit into the 1x2 container
+	decision, found := BottomLeftPolicy{}.FindPlacement(container, Box{
+		ID:        1,
+		Width:     1,
+		Height:    2,
+		CanRotate: true,
+	})
+
+	if !found {
+		t.Fatal("FindPlacement() found no placement; want the rotated orientation")
+	}
+	want := PlacementDecision{Point: Point{X: 0, Y: 0}, Rotated: true}
+	if decision != want {
+		t.Errorf("FindPlacement() = %+v; want %+v", decision, want)
+	}
+}
+
+func TestProcessBatchRecordsRotatedPlacement(t *testing.T) {
+	world, err := NewWorld(1, 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := &SimulationEngine{world: world}
+
+	placed, rotated, err := engine.processBatch(BottomLeftPolicy{}, []QueuedBox{{
+		Box: Box{ID: 1, Width: 1, Height: 2, CanRotate: true},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if placed != 1 || rotated != 1 {
+		t.Fatalf("processBatch() = (%d placed, %d rotated); want (1 placed, 1 rotated)", placed, rotated)
+	}
+
+	placement, found := world.Container.placements[1]
+	if !found {
+		t.Fatal("rotated box was not recorded in the container")
+	}
+	if !placement.Rotated {
+		t.Error("rotated box placement was recorded with Rotated = false")
+	}
+}
+
+func TestBottomLeftPolicyChoosesOriginalOrientationWhenItIsLower(t *testing.T) {
+	container, err := NewContainer(3, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decision, found := BottomLeftPolicy{}.FindPlacement(container, Box{
+		ID:        1,
+		Width:     2,
+		Height:    1,
+		CanRotate: true,
+	})
+
+	if !found {
+		t.Fatal("FindPlacement() found no placement; want the original orientation")
+	}
+	want := PlacementDecision{Point: Point{X: 0, Y: 2}, Rotated: false}
+	if decision != want {
+		t.Errorf("FindPlacement() = %+v; want %+v", decision, want)
+	}
+}
+
+func TestBottomLeftPolicyChoosesRotatedOrientationWhenItIsLower(t *testing.T) {
+	container, err := NewContainer(3, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decision, found := BottomLeftPolicy{}.FindPlacement(container, Box{
+		ID:        1,
+		Width:     1,
+		Height:    2,
+		CanRotate: true,
+	})
+
+	if !found {
+		t.Fatal("FindPlacement() found no placement; want the rotated orientation")
+	}
+	want := PlacementDecision{Point: Point{X: 0, Y: 2}, Rotated: true}
+	if decision != want {
+		t.Errorf("FindPlacement() = %+v; want %+v", decision, want)
+	}
+}
+
+func TestBottomLeftPolicyPrefersOriginalOrientationOnTie(t *testing.T) {
+	container, err := NewContainer(3, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := container.Place(Box{ID: 99, Width: 1, Height: 1}, 1, 2, false); err != nil {
+		t.Fatal(err)
+	}
+
+	decision, found := BottomLeftPolicy{}.FindPlacement(container, Box{
+		ID:        1,
+		Width:     2,
+		Height:    1,
+		CanRotate: true,
+	})
+
+	if !found {
+		t.Fatal("FindPlacement() found no placement; want an orientation tie")
+	}
+	want := PlacementDecision{Point: Point{X: 0, Y: 1}, Rotated: false}
+	if decision != want {
+		t.Errorf("FindPlacement() = %+v; want %+v", decision, want)
+	}
+}
+
+func TestBottomLeftPolicyChoosesOriginalOrientationWhenItIsLeftmost(t *testing.T) {
+	container, err := NewContainer(3, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := container.Place(Box{ID: 98, Width: 1, Height: 1}, 0, 2, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := container.Place(Box{ID: 99, Width: 1, Height: 1}, 2, 2, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// The original 2x1 footprint fits at (0, 1). Its rotated 1x2 footprint
+	// fits on the same row, but only at (1, 1).
+	decision, found := BottomLeftPolicy{}.FindPlacement(container, Box{
+		ID:        1,
+		Width:     2,
+		Height:    1,
+		CanRotate: true,
+	})
+
+	if !found {
+		t.Fatal("FindPlacement() found no placement; want the leftmost original orientation")
+	}
+	want := PlacementDecision{Point: Point{X: 0, Y: 1}, Rotated: false}
+	if decision != want {
+		t.Errorf("FindPlacement() = %+v; want %+v", decision, want)
+	}
+}
+
+func TestBottomLeftPolicyChoosesRotatedOrientationWhenItIsLeftmost(t *testing.T) {
+	container, err := NewContainer(3, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := container.Place(Box{ID: 98, Width: 1, Height: 1}, 0, 2, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := container.Place(Box{ID: 99, Width: 1, Height: 1}, 2, 2, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// The original 1x2 footprint fits at (1, 1). Its rotated 2x1 footprint
+	// fits on the same row at (0, 1), so bottom-left selects the rotation.
+	decision, found := BottomLeftPolicy{}.FindPlacement(container, Box{
+		ID:        1,
+		Width:     1,
+		Height:    2,
+		CanRotate: true,
+	})
+
+	if !found {
+		t.Fatal("FindPlacement() found no placement; want the leftmost rotated orientation")
+	}
+	want := PlacementDecision{Point: Point{X: 0, Y: 1}, Rotated: true}
+	if decision != want {
+		t.Errorf("FindPlacement() = %+v; want %+v", decision, want)
+	}
+}
+
 func TestLargestAreaBottomLeftChangesPlacementOrder(t *testing.T) {
 	// The small box fits first at (0, 1), forcing the large box to (1, 1).
 	// When the large box is placed first, it gets (0, 1), and the small box
@@ -102,7 +280,8 @@ func runPolicyBatch(t *testing.T, policy Policy, batch []QueuedBox) *World {
 
 	engine := &SimulationEngine{world: world}
 	batchCopy := append([]QueuedBox(nil), batch...)
-	placed, err := engine.processBatch(policy, batchCopy)
+	// not testing for amount rotated herer
+	placed, _, err := engine.processBatch(policy, batchCopy)
 	if err != nil {
 		t.Fatal(err)
 	}

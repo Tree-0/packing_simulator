@@ -20,15 +20,17 @@ type UniformBoxDistribution struct {
 }
 
 type RandomBoxGenerator struct {
-	rng             *rand.Rand
-	boxDistribution UniformBoxDistribution
-	nextID          int
+	rng              *rand.Rand
+	boxDistribution  UniformBoxDistribution
+	nextID           int
+	allowBoxRotation bool
 }
 
 func NewRandomBoxGenerator(
 	seed int64,
 	minWidth, maxWidth int,
 	minHeight, maxHeight int,
+	allowBoxRotation bool,
 ) (*RandomBoxGenerator, error) {
 	if minWidth <= 0 || minHeight <= 0 {
 		return nil, errors.New("minimum box dimensions must be positive")
@@ -45,7 +47,8 @@ func NewRandomBoxGenerator(
 			MinHeight: minHeight,
 			MaxHeight: maxHeight,
 		},
-		nextID: 1,
+		nextID:           1,
+		allowBoxRotation: allowBoxRotation,
 	}, nil
 }
 
@@ -55,9 +58,10 @@ func (g *RandomBoxGenerator) Next(t int) QueuedBox {
 	height := dist.MinHeight + g.rng.Intn(dist.MaxHeight-dist.MinHeight+1)
 
 	box := Box{
-		ID:     g.nextID,
-		Width:  width,
-		Height: height,
+		ID:        g.nextID,
+		Width:     width,
+		Height:    height,
+		CanRotate: g.allowBoxRotation,
 	}
 	g.nextID++
 

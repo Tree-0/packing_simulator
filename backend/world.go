@@ -9,10 +9,26 @@ import "errors"
 const EmptyCell = 0
 
 type Box struct {
-	ID     int // >= 1
-	Height int
-	Width  int
-	// Boxes do not rotate for now, may do so in the future
+	ID        int // >= 1
+	Height    int
+	Width     int
+	CanRotate bool
+}
+
+func (b Box) Rotate() Box {
+	return Box{
+		ID:        b.ID,
+		Height:    b.Width,
+		Width:     b.Height,
+		CanRotate: b.CanRotate,
+	}
+}
+
+func (b Box) TryRotate() (Box, error) {
+	if !b.CanRotate {
+		return b, errors.New("box is not rotatable")
+	}
+	return b.Rotate(), nil
 }
 
 type BoxPlacement struct {
@@ -20,6 +36,8 @@ type BoxPlacement struct {
 	// (X,Y) is the top left corner of the Box
 	X int
 	Y int
+	// Rotated records whether the box was placed with its width and height swapped.
+	Rotated bool
 }
 
 type QueuedBox struct {
@@ -97,7 +115,7 @@ func (c *Container) CanPlace(box Box, x, y int) bool {
 	return true
 }
 
-func (c *Container) Place(box Box, x, y int) error {
+func (c *Container) Place(box Box, x, y int, rotated bool) error {
 	if !c.CanPlace(box, x, y) {
 		return errors.New("invalid placement")
 	}
@@ -110,9 +128,10 @@ func (c *Container) Place(box Box, x, y int) error {
 	}
 
 	c.placements[box.ID] = BoxPlacement{
-		BoxID: box.ID,
-		X:     x,
-		Y:     y,
+		BoxID:   box.ID,
+		X:       x,
+		Y:       y,
+		Rotated: rotated,
 	}
 
 	return nil
@@ -126,8 +145,9 @@ func (c *Container) CanFitDimensions(width, height int) bool {
 	return newOccupancyIndex(c).canFitDimensions(width, height)
 }
 
-// occupancyIndex answers empty-rectangle queries for one immutable container
-// state. It must be rebuilt after the container changes.
+// occupancyIndex answers "is this rectangular subsection of the container empty?"
+// efficiently for one immutable container state using prefix sums.
+// It must be rebuilt after the container changes.
 type occupancyIndex struct {
 	width  int
 	height int

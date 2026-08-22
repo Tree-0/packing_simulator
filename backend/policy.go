@@ -10,7 +10,8 @@ import (
 )
 
 type PlacementDecision struct {
-	Point Point
+	Point   Point
+	Rotated bool
 }
 
 type Policy interface {

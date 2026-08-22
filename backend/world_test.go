@@ -41,7 +41,7 @@ func TestPlaceFillsCellsAndPreventsOverlap(t *testing.T) {
 	}
 
 	box := Box{ID: 7, Height: 2, Width: 3}
-	if err := container.Place(box, 1, 1); err != nil {
+	if err := container.Place(box, 1, 1, false); err != nil {
 		t.Fatalf("Place() returned an unexpected error: %v", err)
 	}
 
@@ -61,7 +61,7 @@ func TestPlaceFillsCellsAndPreventsOverlap(t *testing.T) {
 	if !exists {
 		t.Fatal("Place() did not record the placement")
 	}
-	if placement != (BoxPlacement{BoxID: box.ID, X: 1, Y: 1}) {
+	if placement != (BoxPlacement{BoxID: box.ID, X: 1, Y: 1, Rotated: false}) {
 		t.Errorf("placement = %+v; want BoxID 7 at (1, 1)", placement)
 	}
 }
@@ -76,7 +76,7 @@ func TestCanFitDimensions(t *testing.T) {
 		t.Error("an empty container should fit its full dimensions")
 	}
 
-	if err := container.Place(Box{ID: 1, Width: 1, Height: 1}, 1, 1); err != nil {
+	if err := container.Place(Box{ID: 1, Width: 1, Height: 1}, 1, 1, false); err != nil {
 		t.Fatal(err)
 	}
 

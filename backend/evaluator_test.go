@@ -18,7 +18,7 @@ func TestFragmentationEvaluator(t *testing.T) {
 	}
 	for i := 1; i <= len(points); i++ {
 		box := Box{ID: i, Height: 1, Width: 1}
-		if err := container.Place(box, points[i-1].X, points[i-1].Y); err != nil {
+		if err := container.Place(box, points[i-1].X, points[i-1].Y, false); err != nil {
 			t.Fatalf("Place() returned an unexpected error: %v", err)
 		}
 	}
@@ -47,7 +47,7 @@ func TestFragmentationEvaluatorLarge(t *testing.T) {
 	container := &world.Container
 	for i, x := range []int{40, 80} {
 		wall := Box{ID: i + 1, Height: height, Width: 1}
-		if err := container.Place(wall, x, 0); err != nil {
+		if err := container.Place(wall, x, 0, false); err != nil {
 			t.Fatalf("Place() returned an unexpected error: %v", err)
 		}
 	}
@@ -84,7 +84,7 @@ func TestFragmentationEvaluatorEdgeCases(t *testing.T) {
 			world: func(t *testing.T) *World {
 				world := newTestWorld(t, 4, 5)
 				box := Box{ID: 1, Height: 4, Width: 5}
-				if err := world.Container.Place(box, 0, 0); err != nil {
+				if err := world.Container.Place(box, 0, 0, false); err != nil {
 					t.Fatalf("Place() returned an unexpected error: %v", err)
 				}
 				return world
@@ -109,7 +109,7 @@ func TestFragmentationEvaluatorEdgeCases(t *testing.T) {
 							continue
 						}
 						box := Box{ID: boxID, Height: 1, Width: 1}
-						if err := world.Container.Place(box, x, y); err != nil {
+						if err := world.Container.Place(box, x, y, false); err != nil {
 							t.Fatalf("Place() returned an unexpected error: %v", err)
 						}
 						boxID++
@@ -141,7 +141,7 @@ func TestFragmentationEvaluatorEdgeCases(t *testing.T) {
 
 func TestFutureFitProbability(t *testing.T) {
 	world := newTestWorld(t, 3, 3)
-	if err := world.Container.Place(Box{ID: 1, Width: 1, Height: 1}, 1, 1); err != nil {
+	if err := world.Container.Place(Box{ID: 1, Width: 1, Height: 1}, 1, 1, false); err != nil {
 		t.Fatal(err)
 	}
 

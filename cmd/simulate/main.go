@@ -21,6 +21,7 @@ func main() {
 	seed := flag.Int64("seed", time.Now().UnixNano(), "random seed; defaults to a new seed each run")
 	animate := flag.Int("animate", -1, "animate each timestamp with this delay in milliseconds; omit to disable")
 	policyName := flag.String("policy", backend.BottomLeftPolicyName, "packing policy: bottom-left or largest-area-bottom-left")
+	allowBoxRotation := flag.Bool("allow-box-rotation", false, "whether the simulation can rotate boxes when attempting to place them. Defaults to false")
 
 	flag.Parse()
 
@@ -29,14 +30,15 @@ func main() {
 	}
 
 	engine, err := backend.NewSimulationEngine(backend.SimulationConfig{
-		ContainerHeight: *height,
-		ContainerWidth:  *width,
-		QueueSize:       *queueSize,
-		MinBoxHeight:    *minBoxHeight,
-		MaxBoxHeight:    *maxBoxHeight,
-		MinBoxWidth:     *minBoxWidth,
-		MaxBoxWidth:     *maxBoxWidth,
-		Seed:            *seed,
+		ContainerHeight:  *height,
+		ContainerWidth:   *width,
+		QueueSize:        *queueSize,
+		MinBoxHeight:     *minBoxHeight,
+		MaxBoxHeight:     *maxBoxHeight,
+		MinBoxWidth:      *minBoxWidth,
+		MaxBoxWidth:      *maxBoxWidth,
+		Seed:             *seed,
+		AllowBoxRotation: *allowBoxRotation,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -85,10 +87,11 @@ func main() {
 	fmt.Printf("Policy: %s\n", policy.Name())
 	fmt.Printf("Seed: %d\n", *seed)
 	fmt.Printf(
-		"Iterations: %d, generated: %d, placed: %d, rejected: %d, batches: %d\n",
+		"Iterations: %d, generated: %d, placed: %d, rotated: %d, rejected: %d, batches: %d\n",
 		result.Iterations,
 		result.Generated,
 		result.Placed,
+		result.Rotated,
 		result.Rejected,
 		result.Batches,
 	)

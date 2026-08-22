@@ -33,14 +33,15 @@ type batchConfig struct {
 }
 
 type batchSimulationConfig struct {
-	ContainerHeight int `yaml:"container_height"`
-	ContainerWidth  int `yaml:"container_width"`
-	QueueSize       int `yaml:"queue_size"`
-	MinBoxHeight    int `yaml:"min_box_height"`
-	MaxBoxHeight    int `yaml:"max_box_height"`
-	MinBoxWidth     int `yaml:"min_box_width"`
-	MaxBoxWidth     int `yaml:"max_box_width"`
-	Iterations      int `yaml:"iterations"`
+	ContainerHeight  int  `yaml:"container_height"`
+	ContainerWidth   int  `yaml:"container_width"`
+	QueueSize        int  `yaml:"queue_size"`
+	MinBoxHeight     int  `yaml:"min_box_height"`
+	MaxBoxHeight     int  `yaml:"max_box_height"`
+	MinBoxWidth      int  `yaml:"min_box_width"`
+	MaxBoxWidth      int  `yaml:"max_box_width"`
+	Iterations       int  `yaml:"iterations"`
+	AllowBoxRotation bool `yaml:"allow_box_rotation"`
 }
 
 type batchJob struct {
@@ -156,14 +157,15 @@ func (config batchConfig) validate() error {
 
 func (config batchSimulationConfig) toBackendConfig(seed int64) backend.SimulationConfig {
 	return backend.SimulationConfig{
-		ContainerHeight: config.ContainerHeight,
-		ContainerWidth:  config.ContainerWidth,
-		QueueSize:       config.QueueSize,
-		MinBoxHeight:    config.MinBoxHeight,
-		MaxBoxHeight:    config.MaxBoxHeight,
-		MinBoxWidth:     config.MinBoxWidth,
-		MaxBoxWidth:     config.MaxBoxWidth,
-		Seed:            seed,
+		ContainerHeight:  config.ContainerHeight,
+		ContainerWidth:   config.ContainerWidth,
+		QueueSize:        config.QueueSize,
+		MinBoxHeight:     config.MinBoxHeight,
+		MaxBoxHeight:     config.MaxBoxHeight,
+		MinBoxWidth:      config.MinBoxWidth,
+		MaxBoxWidth:      config.MaxBoxWidth,
+		Seed:             seed,
+		AllowBoxRotation: config.AllowBoxRotation,
 	}
 }
 
@@ -307,10 +309,11 @@ func printResults(results []batchResult) {
 	for _, result := range results {
 		fmt.Printf("Policy: %s  Seed: %d\n", result.policy, result.seed)
 		fmt.Printf(
-			"  Iterations: %d, generated: %d, placed: %d, rejected: %d, batches: %d\n",
+			"  Iterations: %d, generated: %d, placed: %d, rotated: %d, rejected: %d, batches: %d\n",
 			result.simulation.Iterations,
 			result.simulation.Generated,
 			result.simulation.Placed,
+			result.simulation.Rotated,
 			result.simulation.Rejected,
 			result.simulation.Batches,
 		)

@@ -7,6 +7,7 @@ simulation:
   min_box_width: 1
   max_box_width: 4
   iterations: 50
+  allow_box_rotation: true
 
 seeds: [42, 43, 44, 45]
 policies:

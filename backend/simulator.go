@@ -11,14 +11,15 @@ import (
 )
 
 type SimulationConfig struct {
-	ContainerHeight int
-	ContainerWidth  int
-	QueueSize       int
-	MinBoxHeight    int
-	MaxBoxHeight    int
-	MinBoxWidth     int
-	MaxBoxWidth     int
-	Seed            int64
+	ContainerHeight  int
+	ContainerWidth   int
+	QueueSize        int
+	MinBoxHeight     int
+	MaxBoxHeight     int
+	MinBoxWidth      int
+	MaxBoxWidth      int
+	Seed             int64
+	AllowBoxRotation bool
 }
 
 type SimulationResult struct {
@@ -27,6 +28,7 @@ type SimulationResult struct {
 	Placed       int
 	Rejected     int
 	Batches      int
+	Rotated      int
 	StoppedEarly bool
 }
 
@@ -62,6 +64,7 @@ func NewSimulationEngine(config SimulationConfig) (*SimulationEngine, error) {
 		config.MaxBoxWidth,
 		config.MinBoxHeight,
 		config.MaxBoxHeight,
+		config.AllowBoxRotation,
 	)
 	if err != nil {
 		return nil, err
@@ -117,12 +120,13 @@ func (eng *SimulationEngine) RunWithObserver(
 		stopped := false
 		if queue.Full() || t == iterations-1 {
 			batch := queue.Drain()
-			placed, err := eng.processBatch(p, batch)
+			placed, rotated, err := eng.processBatch(p, batch)
 			if err != nil {
 				return result, err
 			}
 			result.Batches++
 			result.Placed += placed
+			result.Rotated += rotated
 			result.Rejected += len(batch) - placed
 			if placed == 0 {
 				result.StoppedEarly = true
@@ -144,8 +148,9 @@ func (eng *SimulationEngine) RunWithObserver(
 	return result, nil
 }
 
-func (eng *SimulationEngine) processBatch(p Policy, batch []QueuedBox) (int, error) {
+func (eng *SimulationEngine) processBatch(p Policy, batch []QueuedBox) (int, int, error) {
 	placed := 0
+	rotated := 0
 
 	p.OrderBatch(batch)
 
@@ -155,15 +160,29 @@ func (eng *SimulationEngine) processBatch(p Policy, batch []QueuedBox) (int, err
 			continue
 		}
 
+		box := queued.Box
+
+		// place the rotated box instead, if that's what the policy decided
+		if decision.Rotated {
+			rotated += 1
+			var err error
+			box, err = queued.Box.TryRotate()
+			if err != nil {
+				return placed, rotated, fmt.Errorf("policy %q produced a rotated decision for an unrotatable box %d: %w",
+					p.Name(), queued.Box.ID, err)
+			}
+		}
+
 		if err := eng.world.Container.Place(
-			queued.Box,
+			box,
 			decision.Point.X,
 			decision.Point.Y,
+			decision.Rotated,
 		); err != nil {
-			return placed, fmt.Errorf("policy %q produced an invalid placement for box %d: %w", p.Name(), queued.Box.ID, err)
+			return placed, rotated, fmt.Errorf("policy %q produced an invalid placement for box %d: %w", p.Name(), queued.Box.ID, err)
 		}
 		placed++
 	}
 
-	return placed, nil
+	return placed, rotated, nil
 }
