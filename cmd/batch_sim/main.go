@@ -69,7 +69,7 @@ type jobOutcome struct {
 }
 
 func main() {
-	configPath := flag.String("config", "config/config.yml", "path to the batch simulation YAML config")
+	configPath := flag.String("config", "config/batch_sim/config.yml", "path to the batch simulation YAML config")
 	flag.Parse()
 	if flag.NArg() != 0 {
 		log.Fatalf("unexpected positional arguments: %s", strings.Join(flag.Args(), " "))

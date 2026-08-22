@@ -1,15 +1,15 @@
 simulation:
-  container_height: 20
-  container_width: 20
+  container_height: 50
+  container_width: 50
   queue_size: 5
   min_box_height: 1
-  max_box_height: 4
+  max_box_height: 1
   min_box_width: 1
-  max_box_width: 4
-  iterations: 50
+  max_box_width: 10
+  iterations: 100
   allow_box_rotation: true
 
-seeds: [42, 43, 44, 45]
+seeds: [42, 43, 44, 45, 46]
 policies:
   - bottom-left
   - largest-area-bottom-left
@@ -17,8 +17,6 @@ policies:
 evaluators:
   - utilization
   - fragmentation
-  - area-weighted-fragmentation
-  - compactness
   - future-fit-probability
 
 workers: 0 # 0 = use GOMAXPROCS
