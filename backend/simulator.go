@@ -35,6 +35,17 @@ type SimulationResult struct {
 // StepObserver is called after each timestamp has been processed.
 type StepObserver func(timestamp int, world *World) error
 
+// SimulationProgress describes the cumulative result after one timestamp.
+type SimulationProgress struct {
+	Timestamp int
+	Result    SimulationResult
+}
+
+// ProgressObserver is called after each timestamp has been processed. The
+// supplied World is the engine's live world; observers that retain state must
+// copy the data they need before returning.
+type ProgressObserver func(progress SimulationProgress, world *World) error
+
 type SimulationEngine struct {
 	world        *World
 	generator    BoxGenerator
@@ -88,7 +99,7 @@ func (eng *SimulationEngine) UniformBoxDistribution() UniformBoxDistribution {
 // Run generates one box per iteration and processes boxes whenever the queue
 // reaches its configured limit. A final partial queue is processed as a batch.
 func (eng *SimulationEngine) Run(p Policy, iterations int) (SimulationResult, error) {
-	return eng.RunWithObserver(p, iterations, nil)
+	return eng.run(p, iterations, nil)
 }
 
 // RunWithObserver runs the simulation and calls observer after each timestamp.
@@ -97,6 +108,30 @@ func (eng *SimulationEngine) RunWithObserver(
 	p Policy,
 	iterations int,
 	observer StepObserver,
+) (SimulationResult, error) {
+	if observer == nil {
+		return eng.run(p, iterations, nil)
+	}
+
+	return eng.run(p, iterations, func(progress SimulationProgress, world *World) error {
+		return observer(progress.Timestamp, world)
+	})
+}
+
+// RunWithProgressObserver runs the simulation and reports the cumulative
+// result and world state after every timestamp.
+func (eng *SimulationEngine) RunWithProgressObserver(
+	p Policy,
+	iterations int,
+	observer ProgressObserver,
+) (SimulationResult, error) {
+	return eng.run(p, iterations, observer)
+}
+
+func (eng *SimulationEngine) run(
+	p Policy,
+	iterations int,
+	observer ProgressObserver,
 ) (SimulationResult, error) {
 	result := SimulationResult{}
 	if eng == nil || eng.world == nil || eng.generator == nil {
@@ -135,7 +170,8 @@ func (eng *SimulationEngine) RunWithObserver(
 		}
 
 		if observer != nil {
-			if err := observer(t, eng.world); err != nil {
+			progress := SimulationProgress{Timestamp: t, Result: result}
+			if err := observer(progress, eng.world); err != nil {
 				return result, fmt.Errorf("observing timestamp %d: %w", t, err)
 			}
 		}

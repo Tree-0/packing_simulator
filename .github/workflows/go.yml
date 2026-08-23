@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   verify:
-    name: vet, test
+    name: vet, test, frontend
     runs-on: ubuntu-latest
 
     steps:
@@ -20,8 +20,23 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/web/package-lock.json
+
       - name: Lint
         run: go vet ./...
     
       - name: Test
         run: go test ./...
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend/web
+
+      - name: Check frontend
+        run: npm run check --prefix frontend/web
+
+      - name: Verify embedded frontend bundle
+        run: git diff --exit-code -- frontend/web/dist
