@@ -48,10 +48,11 @@ type QueuedBox struct {
 // The grid of placed boxes
 type Container struct {
 	// slots 0 -> n-1
-	height     int
-	width      int
-	cells      [][]int // Cells[y][x] contains a box ID or EmptyCell
-	placements map[int]BoxPlacement
+	height       int
+	width        int
+	cells        [][]int // Cells[y][x] contains a box ID or EmptyCell
+	placements   map[int]BoxPlacement
+	occupiedArea int
 }
 
 func (c *Container) Height() int {
@@ -133,6 +134,7 @@ func (c *Container) Place(box Box, x, y int, rotated bool) error {
 		Y:       y,
 		Rotated: rotated,
 	}
+	c.occupiedArea += box.Height * box.Width
 
 	return nil
 }
