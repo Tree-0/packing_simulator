@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"packing_simulator/backend"
+	"packing_simulator/backend/evaluator"
+	"packing_simulator/backend/policy"
 	"packing_simulator/internal/simconfig"
 )
 
@@ -37,7 +39,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	policy, err := backend.NewPolicy(*values.PolicyName)
+	policy, err := policy.NewPolicy(*values.PolicyName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -93,10 +95,10 @@ func main() {
 	}
 
 	fmt.Println("Evaluations:")
-	for _, evalType := range backend.AllEvaluationTypes() {
-		value := backend.EvaluateSimulation(engine, evalType)
+	for _, evalType := range evaluator.AllEvaluationTypes() {
+		value := evaluator.EvaluateSimulation(engine, evalType)
 		switch evalType {
-		case backend.ContainerUtilization, backend.FutureFitProbabilityMetric:
+		case evaluator.ContainerUtilization, evaluator.FutureFitProbabilityMetric:
 			fmt.Printf("  %-24s %.1f%%\n", evalType, 100*value)
 		default:
 			fmt.Printf("  %-24s %.4f\n", evalType, value)

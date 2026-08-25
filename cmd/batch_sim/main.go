@@ -17,6 +17,8 @@ import (
 	"sync"
 
 	"packing_simulator/backend"
+	"packing_simulator/backend/evaluator"
+	"packing_simulator/backend/policy"
 
 	"gopkg.in/yaml.v3"
 )
@@ -51,7 +53,7 @@ type batchJob struct {
 }
 
 type evaluationResult struct {
-	evaluation backend.EvaluationType
+	evaluation evaluator.EvaluationType
 	value      float64
 }
 
@@ -142,12 +144,12 @@ func (config batchConfig) validate() error {
 	}
 
 	for _, name := range config.Policies {
-		if _, err := backend.NewPolicy(name); err != nil {
+		if _, err := policy.NewPolicy(name); err != nil {
 			return err
 		}
 	}
 	for _, name := range config.Evaluators {
-		if _, err := parseEvaluation(name); err != nil {
+		if _, err := evaluator.ParseEvaluation(name); err != nil {
 			return err
 		}
 	}
@@ -169,31 +171,10 @@ func (config batchSimulationConfig) toBackendConfig(seed int64) backend.Simulati
 	}
 }
 
-// Get the evaluator name from config and return the type
-func parseEvaluation(name string) (backend.EvaluationType, error) {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "utilization":
-		return backend.ContainerUtilization, nil
-	case "fragmentation":
-		return backend.ContainerFragmentation, nil
-	case "area-weighted-fragmentation":
-		return backend.AreaWeightedContainerFragmentation, nil
-	case "compactness":
-		return backend.ContainerCompactness, nil
-	case "future-fit-probability":
-		return backend.FutureFitProbabilityMetric, nil
-	default:
-		return 0, fmt.Errorf(
-			"unknown evaluator %q; choose one of: utilization, fragmentation, area-weighted-fragmentation, compactness, future-fit-probability",
-			name,
-		)
-	}
-}
-
 func runBatch(config batchConfig) ([]batchResult, error) {
-	evaluations := make([]backend.EvaluationType, len(config.Evaluators))
+	evaluations := make([]evaluator.EvaluationType, len(config.Evaluators))
 	for i, name := range config.Evaluators {
-		evaluation, err := parseEvaluation(name)
+		evaluation, err := evaluator.ParseEvaluation(name)
 		if err != nil {
 			return nil, err
 		}
@@ -271,7 +252,7 @@ func runBatch(config batchConfig) ([]batchResult, error) {
 
 func runJob(
 	simulationConfig batchSimulationConfig,
-	evaluations []backend.EvaluationType,
+	evaluations []evaluator.EvaluationType,
 	job batchJob,
 ) (batchResult, error) {
 	engine, err := backend.NewSimulationEngine(simulationConfig.toBackendConfig(job.seed))
@@ -279,7 +260,7 @@ func runJob(
 		return batchResult{}, fmt.Errorf("policy %q, seed %d: create engine: %w", job.policyName, job.seed, err)
 	}
 
-	policy, err := backend.NewPolicy(job.policyName)
+	policy, err := policy.NewPolicy(job.policyName)
 	if err != nil {
 		return batchResult{}, fmt.Errorf("policy %q, seed %d: %w", job.policyName, job.seed, err)
 	}
@@ -298,7 +279,7 @@ func runJob(
 	for i, evaluation := range evaluations {
 		result.evaluations[i] = evaluationResult{
 			evaluation: evaluation,
-			value:      backend.EvaluateSimulation(engine, evaluation),
+			value:      evaluator.EvaluateSimulation(engine, evaluation),
 		}
 	}
 
@@ -323,7 +304,7 @@ func printResults(results []batchResult) {
 
 		for _, evaluation := range result.evaluations {
 			switch evaluation.evaluation {
-			case backend.ContainerUtilization, backend.FutureFitProbabilityMetric:
+			case evaluator.ContainerUtilization, evaluator.FutureFitProbabilityMetric:
 				fmt.Printf("  %-24s %.1f%%\n", evaluation.evaluation, 100*evaluation.value)
 			default:
 				fmt.Printf("  %-24s %.4f\n", evaluation.evaluation, evaluation.value)

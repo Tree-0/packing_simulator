@@ -71,6 +71,10 @@ func (c *Container) Cell(x, y int) (int, error) {
 	return c.cells[y][x], nil
 }
 
+func (c *Container) OccupiedArea() int {
+	return c.occupiedArea
+}
+
 func NewContainer(height, width int) (*Container, error) {
 	if width <= 0 || height <= 0 {
 		return nil, errors.New("dimensions must be positive")
@@ -222,7 +226,7 @@ func (c *Container) OccupancySnapshot() OccupancySnapshot {
 
 	return OccupancySnapshot{
 		newOccupancyIndex(c),
-	} 
+	}
 }
 
 func (s OccupancySnapshot) CanFitDimensions(width, height int) bool {

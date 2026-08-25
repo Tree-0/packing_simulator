@@ -1,18 +1,25 @@
-package backend
+package backend_test
 
 import (
 	"errors"
 	"testing"
+
+	"packing_simulator/backend"
+	"packing_simulator/backend/policy"
 )
 
 func TestRunWithProgressObserverReportsCumulativeResults(t *testing.T) {
 	engine := newProgressTestEngine(t, 2, 2)
-	var progress []SimulationProgress
+	var progress []backend.SimulationProgress
 
-	result, err := engine.RunWithProgressObserver(BottomLeftPolicy{}, 2, func(step SimulationProgress, _ *World) error {
-		progress = append(progress, step)
-		return nil
-	})
+	result, err := engine.RunWithProgressObserver(
+		newBottomLeftPolicy(t),
+		2,
+		func(step backend.SimulationProgress, _ *backend.World) error {
+			progress = append(progress, step)
+			return nil
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,9 +37,9 @@ func TestRunWithProgressObserverReportsCumulativeResults(t *testing.T) {
 
 func TestRunWithProgressObserverReportsEarlyStop(t *testing.T) {
 	engine := newProgressTestEngine(t, 1, 1)
-	var final SimulationProgress
+	var final backend.SimulationProgress
 
-	result, err := engine.RunWithProgressObserver(BottomLeftPolicy{}, 3, func(step SimulationProgress, _ *World) error {
+	result, err := engine.RunWithProgressObserver(newBottomLeftPolicy(t), 3, func(step backend.SimulationProgress, _ *backend.World) error {
 		final = step
 		return nil
 	})
@@ -51,7 +58,7 @@ func TestRunWithProgressObserverReportsEarlyStop(t *testing.T) {
 func TestRunWithProgressObserverZeroIterations(t *testing.T) {
 	engine := newProgressTestEngine(t, 2, 2)
 	called := false
-	result, err := engine.RunWithProgressObserver(BottomLeftPolicy{}, 0, func(SimulationProgress, *World) error {
+	result, err := engine.RunWithProgressObserver(newBottomLeftPolicy(t), 0, func(backend.SimulationProgress, *backend.World) error {
 		called = true
 		return nil
 	})
@@ -61,7 +68,7 @@ func TestRunWithProgressObserverZeroIterations(t *testing.T) {
 	if called {
 		t.Error("observer called for a zero-iteration simulation")
 	}
-	if result != (SimulationResult{}) {
+	if result != (backend.SimulationResult{}) {
 		t.Errorf("result = %+v; want zero value", result)
 	}
 }
@@ -69,7 +76,7 @@ func TestRunWithProgressObserverZeroIterations(t *testing.T) {
 func TestRunWithProgressObserverWrapsErrors(t *testing.T) {
 	engine := newProgressTestEngine(t, 2, 2)
 	want := errors.New("stop recording")
-	_, err := engine.RunWithProgressObserver(BottomLeftPolicy{}, 1, func(SimulationProgress, *World) error {
+	_, err := engine.RunWithProgressObserver(newBottomLeftPolicy(t), 1, func(backend.SimulationProgress, *backend.World) error {
 		return want
 	})
 	if !errors.Is(err, want) {
@@ -77,9 +84,9 @@ func TestRunWithProgressObserverWrapsErrors(t *testing.T) {
 	}
 }
 
-func newProgressTestEngine(t *testing.T, height, width int) *SimulationEngine {
+func newProgressTestEngine(t *testing.T, height, width int) *backend.SimulationEngine {
 	t.Helper()
-	engine, err := NewSimulationEngine(SimulationConfig{
+	engine, err := backend.NewSimulationEngine(backend.SimulationConfig{
 		ContainerHeight: height,
 		ContainerWidth:  width,
 		QueueSize:       1,
@@ -93,4 +100,13 @@ func newProgressTestEngine(t *testing.T, height, width int) *SimulationEngine {
 		t.Fatal(err)
 	}
 	return engine
+}
+
+func newBottomLeftPolicy(t *testing.T) backend.Policy {
+	t.Helper()
+	p, err := policy.NewPolicy(policy.BottomLeftPolicyName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
