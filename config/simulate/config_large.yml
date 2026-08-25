@@ -1,0 +1,14 @@
+simulation:
+  container_height: 500
+  container_width: 500
+  queue_size: 10
+  min_box_height: 5
+  max_box_height: 50
+  min_box_width: 5
+  max_box_width: 50
+  iterations: 500
+  seed: 42
+  allow_box_rotation: true
+
+policy: bottom-left
+animate: -1
