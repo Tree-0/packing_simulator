@@ -7,6 +7,8 @@ import (
 	"sort"
 
 	"packing_simulator/backend"
+	"packing_simulator/backend/evaluator"
+	"packing_simulator/backend/policy"
 )
 
 const DefaultFrameDelayMS = 250
@@ -73,7 +75,7 @@ func RecordSimulation(spec SimulationSpec) (SimulationRecording, error) {
 		return SimulationRecording{}, fmt.Errorf("create simulation engine: %w", err)
 	}
 
-	policy, err := backend.NewPolicy(spec.PolicyName)
+	policy, err := policy.NewPolicy(spec.PolicyName)
 	if err != nil {
 		return SimulationRecording{}, err
 	}
@@ -192,15 +194,15 @@ func placedBoxes(container *backend.Container) []PlacedBox {
 }
 
 func evaluationValues(engine *backend.SimulationEngine) []EvaluationValue {
-	evaluations := make([]EvaluationValue, 0, len(backend.AllEvaluationTypes()))
-	for _, evaluationType := range backend.AllEvaluationTypes() {
+	evaluations := make([]EvaluationValue, 0, len(evaluator.AllEvaluationTypes()))
+	for _, evaluationType := range evaluator.AllEvaluationTypes() {
 		format := "decimal"
-		if evaluationType == backend.ContainerUtilization || evaluationType == backend.FutureFitProbabilityMetric {
+		if evaluationType == evaluator.ContainerUtilization || evaluationType == evaluator.FutureFitProbabilityMetric {
 			format = "percent"
 		}
 		evaluations = append(evaluations, EvaluationValue{
 			Name:   evaluationType.String(),
-			Value:  backend.EvaluateSimulation(engine, evaluationType),
+			Value:  evaluator.EvaluateSimulation(engine, evaluationType),
 			Format: format,
 		})
 	}

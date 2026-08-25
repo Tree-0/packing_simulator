@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"packing_simulator/backend"
+	"packing_simulator/backend/evaluator"
+	"packing_simulator/backend/policy"
 )
 
 func TestRecordSimulationCapturesInitialAndTimestampFrames(t *testing.T) {
@@ -21,7 +23,7 @@ func TestRecordSimulationCapturesInitialAndTimestampFrames(t *testing.T) {
 			Seed:            7,
 		},
 		Iterations: 2,
-		PolicyName: backend.BottomLeftPolicyName,
+		PolicyName: policy.BottomLeftPolicyName,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -37,8 +39,8 @@ func TestRecordSimulationCapturesInitialAndTimestampFrames(t *testing.T) {
 	if initial.Timestamp != nil || initial.Stats != (SimulationStats{}) || len(initial.Boxes) != 0 {
 		t.Errorf("initial frame = %+v", initial)
 	}
-	if len(initial.Evaluations) != len(backend.AllEvaluationTypes()) {
-		t.Errorf("initial evaluations = %d; want %d", len(initial.Evaluations), len(backend.AllEvaluationTypes()))
+	if len(initial.Evaluations) != len(evaluator.AllEvaluationTypes()) {
+		t.Errorf("initial evaluations = %d; want %d", len(initial.Evaluations), len(evaluator.AllEvaluationTypes()))
 	}
 
 	final := recording.Frames[2]
@@ -51,7 +53,7 @@ func TestRecordSimulationCapturesInitialAndTimestampFrames(t *testing.T) {
 	if len(final.Boxes) != 2 || final.Boxes[0].ID != 1 || final.Boxes[1].ID != 2 {
 		t.Errorf("final boxes = %+v", final.Boxes)
 	}
-	if got := evaluationByName(t, final, backend.ContainerUtilization.String()); math.Abs(got-2.0/6.0) > 1e-9 {
+	if got := evaluationByName(t, final, evaluator.ContainerUtilization.String()); math.Abs(got-2.0/6.0) > 1e-9 {
 		t.Errorf("utilization = %f; want %f", got, 2.0/6.0)
 	}
 	if len(recording.Frames[1].Boxes) != 1 {
@@ -70,7 +72,7 @@ func TestRecordSimulationZeroIterations(t *testing.T) {
 			MinBoxWidth:     1,
 			MaxBoxWidth:     1,
 		},
-		PolicyName: backend.BottomLeftPolicyName,
+		PolicyName: policy.BottomLeftPolicyName,
 	})
 	if err != nil {
 		t.Fatal(err)
