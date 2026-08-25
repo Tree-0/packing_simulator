@@ -100,3 +100,15 @@ func TestCanFitDimensions(t *testing.T) {
 		})
 	}
 }
+
+func TestZeroValueOccupancySnapshotCannotFitDimensions(t *testing.T) {
+	snapshot := OccupancySnapshot{}
+	if snapshot.CanFitDimensions(1, 1) {
+		t.Error("zero-value occupancy snapshot should not fit positive dimensions")
+	}
+
+	var container *Container
+	if container.OccupancySnapshot().CanFitDimensions(1, 1) {
+		t.Error("nil container occupancy snapshot should not fit positive dimensions")
+	}
+}

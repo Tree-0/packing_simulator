@@ -156,6 +156,13 @@ type occupancyIndex struct {
 	prefix [][]int
 }
 
+// publicly exposed wrapper of the index that can be used by other packages,
+// such as `evaluator`.
+// Snapshots become stale after Container.Place().
+type OccupancySnapshot struct {
+	index occupancyIndex
+}
+
 func newOccupancyIndex(c *Container) occupancyIndex {
 	index := occupancyIndex{
 		width:  c.width,
@@ -206,6 +213,20 @@ func (index occupancyIndex) canFitDimensions(width, height int) bool {
 	}
 
 	return false
+}
+
+func (c *Container) OccupancySnapshot() OccupancySnapshot {
+	if c == nil {
+		return OccupancySnapshot{}
+	}
+
+	return OccupancySnapshot{
+		newOccupancyIndex(c),
+	} 
+}
+
+func (s OccupancySnapshot) CanFitDimensions(width, height int) bool {
+	return s.index.canFitDimensions(width, height)
 }
 
 // The queue of boxes to be placed into a Container
