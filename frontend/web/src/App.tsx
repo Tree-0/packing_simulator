@@ -30,10 +30,9 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Spatial systems lab</p>
           <h1>Packing Simulator</h1>
         </div>
-        <p className="app-intro">Watch each policy turn a queue of rectangles into occupied space.</p>
+        <p className="app-intro">Bin-packing with rolling-horizon heuristics</p>
       </header>
 
       {state.status === 'loading' && (
