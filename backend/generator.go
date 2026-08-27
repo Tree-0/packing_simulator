@@ -6,11 +6,18 @@ package backend
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 )
 
+type Workload struct {
+	ID       int
+	Arrivals []QueuedBox
+}
+
 type BoxGenerator interface {
 	Next(arrivedAt int) QueuedBox
+	NextN(arrivedAt int, n int) (*Workload, error)
 	BoxDistribution() UniformBoxDistribution
 }
 
@@ -23,6 +30,7 @@ type RandomBoxGenerator struct {
 	rng              *rand.Rand
 	boxDistribution  UniformBoxDistribution
 	nextID           int
+	nextWorkloadID   int
 	allowBoxRotation bool
 }
 
@@ -48,6 +56,7 @@ func NewRandomBoxGenerator(
 			MaxHeight: maxHeight,
 		},
 		nextID:           1,
+		nextWorkloadID:   1,
 		allowBoxRotation: allowBoxRotation,
 	}, nil
 }
@@ -70,4 +79,27 @@ func (g *RandomBoxGenerator) Next(t int) QueuedBox {
 
 func (g *RandomBoxGenerator) BoxDistribution() UniformBoxDistribution {
 	return g.boxDistribution
+}
+
+// Generates the specified number of boxes from the generator
+func (g *RandomBoxGenerator) NextN(t int, numBoxes int) (*Workload, error) {
+	if numBoxes < 0 {
+		return nil, fmt.Errorf("numBoxes must be nonnegative, got %d", numBoxes)
+	}
+
+	arrivals := make([]QueuedBox, numBoxes)
+	for i := 0; i < numBoxes; i++ {
+		// for now, all boxes arrive at the same time when creating a workload
+		arrivals[i] = g.Next(t)
+	}
+
+	workload := Workload{
+		ID:       g.nextWorkloadID,
+		Arrivals: arrivals,
+	}
+
+	g.nextWorkloadID += 1
+
+	return &workload, nil
+
 }
