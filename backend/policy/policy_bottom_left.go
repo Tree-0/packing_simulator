@@ -11,11 +11,13 @@ func (BottomLeftPolicy) Name() string {
 }
 
 // no-op; policy does not sort batch
-func (BottomLeftPolicy) OrderBatch(batch []backend.QueuedBox) {}
+func (BottomLeftPolicy) OrderBatch(batch []backend.QueuedBox) []backend.QueuedBox {
+	return append([]backend.QueuedBox(nil), batch...) // return a copy
+}
 
 // assumes the caller handles null containers
 func findPlacementHelper(
-	container *backend.Container,
+	container *backend.ContainerSnapshot,
 	box backend.Box,
 	rotated bool,
 ) (backend.PlacementDecision, bool) {
@@ -34,14 +36,12 @@ func findPlacementHelper(
 }
 
 func (BottomLeftPolicy) FindPlacement(
-	container *backend.Container,
+	context backend.PolicyContext,
 	box backend.Box,
 ) (backend.PlacementDecision, bool) {
-	if container == nil {
-		return backend.PlacementDecision{}, false
-	}
+	container := context.Container
 
-	decision, found := findPlacementHelper(container, box, false)
+	decision, found := findPlacementHelper(&container, box, false)
 
 	// if no valid rotation, return our current placement (or none)
 	if !box.CanRotate || box.Height == box.Width {
@@ -55,7 +55,7 @@ func (BottomLeftPolicy) FindPlacement(
 		CanRotate: true,
 	}
 
-	rotatedDecision, rotatedFound := findPlacementHelper(container, rotatedBox, true)
+	rotatedDecision, rotatedFound := findPlacementHelper(&container, rotatedBox, true)
 
 	if !rotatedFound {
 		return decision, found

@@ -155,7 +155,7 @@ func (eng *SimulationEngine) run(
 		stopped := false
 		if queue.Full() || t == iterations-1 {
 			batch := queue.Drain()
-			placed, rotated, err := eng.processBatch(p, batch)
+			placed, rotated, err := eng.processBatch(t, p, batch)
 			if err != nil {
 				return result, err
 			}
@@ -184,14 +184,21 @@ func (eng *SimulationEngine) run(
 	return result, nil
 }
 
-func (eng *SimulationEngine) processBatch(p Policy, batch []QueuedBox) (int, int, error) {
+func (eng *SimulationEngine) processBatch(t int, p Policy, batch []QueuedBox) (int, int, error) {
 	placed := 0
 	rotated := 0
 
-	p.OrderBatch(batch)
+	batch = p.OrderBatch(batch)
 
-	for _, queued := range batch {
-		decision, found := p.FindPlacement(&eng.world.Container, queued.Box)
+	for i, queued := range batch {
+		// construct the context that the policy will use to make a placement decision
+		context := PolicyContext{
+			Timestamp: t,
+			Container: eng.world.Container.ContainerSnapshot(),
+			Batch:     append([]QueuedBox(nil), batch[i:]...), // copy of boxes yet to be placed
+		}
+
+		decision, found := p.FindPlacement(context, queued.Box)
 		if !found {
 			continue
 		}

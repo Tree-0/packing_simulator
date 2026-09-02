@@ -55,12 +55,28 @@ type Container struct {
 	occupiedArea int
 }
 
+// Read-only wrapper of a Container
+// Passed to policies as part of a PolicyContext for
+// use in making placement decisions.
+type ContainerSnapshot struct {
+	occupiedArea int
+	index        occupancyIndex
+}
+
 func (c *Container) Height() int {
 	return c.height
 }
 
+func (s *ContainerSnapshot) Height() int {
+	return s.index.height
+}
+
 func (c *Container) Width() int {
 	return c.width
+}
+
+func (s *ContainerSnapshot) Width() int {
+	return s.index.width
 }
 
 func (c *Container) Cell(x, y int) (int, error) {
@@ -73,6 +89,10 @@ func (c *Container) Cell(x, y int) (int, error) {
 
 func (c *Container) OccupiedArea() int {
 	return c.occupiedArea
+}
+
+func (s *ContainerSnapshot) OccupiedArea() int {
+	return s.occupiedArea
 }
 
 func NewContainer(height, width int) (*Container, error) {
@@ -91,6 +111,17 @@ func NewContainer(height, width int) (*Container, error) {
 		cells:      cells,
 		placements: make(map[int]BoxPlacement),
 	}, nil
+}
+
+func (c *Container) ContainerSnapshot() ContainerSnapshot {
+	if c == nil {
+		return ContainerSnapshot{}
+	}
+
+	return ContainerSnapshot{
+		occupiedArea: c.occupiedArea,
+		index:        newOccupancyIndex(c), //value
+	}
 }
 
 func (c *Container) CanPlace(box Box, x, y int) bool {
@@ -118,6 +149,31 @@ func (c *Container) CanPlace(box Box, x, y int) bool {
 	}
 
 	return true
+}
+
+func (s *ContainerSnapshot) CanPlace(box Box, x, y int) bool {
+	if s == nil || box.ID < 1 || box.Width <= 0 || box.Height <= 0 {
+		return false
+	}
+
+	index := s.index
+
+	// Check the top-left coordinate and ensure the box does not extend
+	// beyond the right or bottom edges of the container snapshot.
+	if x < 0 || y < 0 ||
+		x > index.width-box.Width ||
+		y > index.height-box.Height {
+		return false
+	}
+
+	bottom := y + box.Height
+	right := x + box.Width
+	occupied := index.prefix[bottom][right] -
+		index.prefix[y][right] -
+		index.prefix[bottom][x] +
+		index.prefix[y][x]
+
+	return occupied == 0
 }
 
 func (c *Container) Place(box Box, x, y int, rotated bool) error {
@@ -149,6 +205,16 @@ func (c *Container) CanFitDimensions(width, height int) bool {
 	}
 
 	return newOccupancyIndex(c).canFitDimensions(width, height)
+}
+
+// Like Container.CanFitDimensions, but re-uses existing occupancy index
+// for the snapshot, rather than building a new one.
+func (s *ContainerSnapshot) CanFitDimensions(width, height int) bool {
+	if s == nil || width <= 0 || height <= 0 {
+		return false
+	}
+
+	return s.index.canFitDimensions(width, height)
 }
 
 // occupancyIndex answers "is this rectangular subsection of the container empty?"
@@ -196,6 +262,8 @@ func newOccupancyIndex(c *Container) occupancyIndex {
 	return index
 }
 
+// Checks whether we can fit a box anywhere in the container.
+// The index is built off of a particular container with Container.newOccupancyIndex().
 func (index occupancyIndex) canFitDimensions(width, height int) bool {
 	if width <= 0 || height <= 0 || height > index.height || width > index.width {
 		return false

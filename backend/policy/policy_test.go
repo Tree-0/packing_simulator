@@ -15,10 +15,10 @@ func TestLargestAreaBottomLeftOrderBatch(t *testing.T) {
 		{Box: backend.Box{ID: 4, Width: 2, Height: 2}}, // area 4
 	}
 
-	LargestAreaBottomLeftPolicy{}.OrderBatch(batch)
+	sorted := LargestAreaBottomLeftPolicy{}.OrderBatch(batch)
 
-	gotIDs := make([]int, len(batch))
-	for i, queued := range batch {
+	gotIDs := make([]int, len(sorted))
+	for i, queued := range sorted {
 		gotIDs[i] = queued.Box.ID
 	}
 	wantIDs := []int{2, 4, 3, 1}
@@ -65,7 +65,7 @@ func TestBottomLeftPolicyOnlyRotatedOrientationFits(t *testing.T) {
 	}
 
 	// rotating is the only way to fit into the 1x2 container
-	decision, found := BottomLeftPolicy{}.FindPlacement(container, backend.Box{
+	decision, found := BottomLeftPolicy{}.FindPlacement(newPolicyContext(container, nil), backend.Box{
 		ID:        1,
 		Width:     1,
 		Height:    2,
@@ -123,7 +123,7 @@ func TestBottomLeftPolicyChoosesOriginalOrientationWhenItIsLower(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	decision, found := BottomLeftPolicy{}.FindPlacement(container, backend.Box{
+	decision, found := BottomLeftPolicy{}.FindPlacement(newPolicyContext(container, nil), backend.Box{
 		ID:        1,
 		Width:     2,
 		Height:    1,
@@ -145,7 +145,7 @@ func TestBottomLeftPolicyChoosesRotatedOrientationWhenItIsLower(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	decision, found := BottomLeftPolicy{}.FindPlacement(container, backend.Box{
+	decision, found := BottomLeftPolicy{}.FindPlacement(newPolicyContext(container, nil), backend.Box{
 		ID:        1,
 		Width:     1,
 		Height:    2,
@@ -170,7 +170,7 @@ func TestBottomLeftPolicyPrefersOriginalOrientationOnTie(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	decision, found := BottomLeftPolicy{}.FindPlacement(container, backend.Box{
+	decision, found := BottomLeftPolicy{}.FindPlacement(newPolicyContext(container, nil), backend.Box{
 		ID:        1,
 		Width:     2,
 		Height:    1,
@@ -200,7 +200,7 @@ func TestBottomLeftPolicyChoosesOriginalOrientationWhenItIsLeftmost(t *testing.T
 
 	// The original 2x1 footprint fits at (0, 1). Its rotated 1x2 footprint
 	// fits on the same row, but only at (1, 1).
-	decision, found := BottomLeftPolicy{}.FindPlacement(container, backend.Box{
+	decision, found := BottomLeftPolicy{}.FindPlacement(newPolicyContext(container, nil), backend.Box{
 		ID:        1,
 		Width:     2,
 		Height:    1,
@@ -230,7 +230,7 @@ func TestBottomLeftPolicyChoosesRotatedOrientationWhenItIsLeftmost(t *testing.T)
 
 	// The original 1x2 footprint fits at (1, 1). Its rotated 2x1 footprint
 	// fits on the same row at (0, 1), so bottom-left selects the rotation.
-	decision, found := BottomLeftPolicy{}.FindPlacement(container, backend.Box{
+	decision, found := BottomLeftPolicy{}.FindPlacement(newPolicyContext(container, nil), backend.Box{
 		ID:        1,
 		Width:     1,
 		Height:    2,
@@ -293,10 +293,10 @@ func runPolicyBatch(t *testing.T, p backend.Policy, batch []backend.QueuedBox) *
 	}
 
 	batchCopy := append([]backend.QueuedBox(nil), batch...)
-	p.OrderBatch(batchCopy)
+	batchCopy = p.OrderBatch(batchCopy)
 	placed := 0
 	for _, queued := range batchCopy {
-		decision, found := p.FindPlacement(container, queued.Box)
+		decision, found := p.FindPlacement(newPolicyContext(container, batchCopy), queued.Box)
 		if !found {
 			continue
 		}
@@ -318,6 +318,13 @@ func runPolicyBatch(t *testing.T, p backend.Policy, batch []backend.QueuedBox) *
 	}
 
 	return container
+}
+
+func newPolicyContext(container *backend.Container, batch []backend.QueuedBox) backend.PolicyContext {
+	return backend.PolicyContext{
+		Container: container.ContainerSnapshot(),
+		Batch:     append([]backend.QueuedBox(nil), batch...),
+	}
 }
 
 func containerCells(t *testing.T, container *backend.Container) [][]int {

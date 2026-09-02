@@ -13,25 +13,28 @@ func (LargestAreaBottomLeftPolicy) Name() string {
 	return LargestAreaBottomLeftPolicyName
 }
 
-func (LargestAreaBottomLeftPolicy) OrderBatch(batch []backend.QueuedBox) {
-	sort.SliceStable(batch, func(i, j int) bool {
-		areaI := batch[i].Box.Width * batch[i].Box.Height
-		areaJ := batch[j].Box.Width * batch[j].Box.Height
+func (LargestAreaBottomLeftPolicy) OrderBatch(batch []backend.QueuedBox) []backend.QueuedBox {
+	sorted := append([]backend.QueuedBox(nil), batch...)
+
+	sort.SliceStable(sorted, func(i, j int) bool {
+		areaI := sorted[i].Box.Width * sorted[i].Box.Height
+		areaJ := sorted[j].Box.Width * sorted[j].Box.Height
 
 		return areaI > areaJ
 	})
+
+	return sorted
 }
 
 // Same as BottomLeftPolicy, but the OrderBatch function will have been called by
 // the simulation engine to change the order in which boxes are placed.
 func (LargestAreaBottomLeftPolicy) FindPlacement(
-	container *backend.Container, box backend.Box,
+	context backend.PolicyContext,
+	box backend.Box,
 ) (backend.PlacementDecision, bool) {
-	if container == nil {
-		return backend.PlacementDecision{}, false
-	}
+	container := context.Container
 
-	decision, found := findPlacementHelper(container, box, false)
+	decision, found := findPlacementHelper(&container, box, false)
 
 	// if no valid rotation, return our current placement (or none)
 	if !box.CanRotate || box.Height == box.Width {
@@ -45,7 +48,7 @@ func (LargestAreaBottomLeftPolicy) FindPlacement(
 		CanRotate: true,
 	}
 
-	rotatedDecision, rotatedFound := findPlacementHelper(container, rotatedBox, true)
+	rotatedDecision, rotatedFound := findPlacementHelper(&container, rotatedBox, true)
 
 	if !rotatedFound {
 		return decision, found

@@ -112,3 +112,23 @@ func TestZeroValueOccupancySnapshotCannotFitDimensions(t *testing.T) {
 		t.Error("nil container occupancy snapshot should not fit positive dimensions")
 	}
 }
+
+func TestSnapshotRemainsUnchangedAfterContainerPlacement(t *testing.T) {
+	container, err := NewContainer(2, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot := container.ContainerSnapshot()
+	box := Box{ID: 1, Width: 2, Height: 2}
+	if err := container.Place(box, 0, 0, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := snapshot.OccupiedArea(); got != 0 {
+		t.Errorf("snapshot occupied area = %d; want 0", got)
+	}
+	if !snapshot.CanPlace(Box{ID: 2, Width: 2, Height: 2}, 0, 0) {
+		t.Error("snapshot changed after placement in the source container")
+	}
+}
