@@ -71,23 +71,58 @@ type jobOutcome struct {
 }
 
 func main() {
+	mode := flag.String("mode", "batch", "the simulation mode we are running: 'batch' or 'experiment'")
 	configPath := flag.String("config", "config/batch_sim/config.yml", "path to the batch simulation YAML config")
 	flag.Parse()
 	if flag.NArg() != 0 {
 		log.Fatalf("unexpected positional arguments: %s", strings.Join(flag.Args(), " "))
 	}
 
-	config, err := loadConfig(*configPath)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// Run an experiment on a set of simulation scenarios and aggregate results
+	if *mode == "experiment" {
+		experimentConfig, err := loadExperimentConfig(*configPath)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	results, err := runBatch(config)
-	if err != nil {
-		log.Fatal(err)
-	}
+		// run multiple different batches (different simulation parameters)
+		// on the same set of policies, seeds, and evaluators
+		results, err := runExperiment(experimentConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	printResults(results)
+		// display experiment results
+		PrintRunResults(experimentConfig, results)
+
+		aggregates, err := AggregateResults(results)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// display aggregate results
+		PrintAggregateResults(experimentConfig, aggregates)
+
+		// Run a batch of simulations (one workload, multiple seeds and policies)
+	} else if *mode == "batch" {
+		batchConfig, err := loadConfig(*configPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		results, err := runBatch(batchConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		printResults(results)
+
+		// unrecognized simulation mode type
+	} else {
+		log.Fatal(
+			fmt.Errorf("Unrecognized simulation mode: got %q, expected 'batch' or 'experiment'", *mode),
+		)
+	}
 }
 
 // loadConfig reads and validates one YAML configuration file. A relative path
@@ -312,4 +347,14 @@ func printResults(results []batchResult) {
 		}
 		fmt.Println()
 	}
+}
+
+func printBatchSimulationConfig(config batchSimulationConfig) {
+	fmt.Println("Simulation configuration:")
+	fmt.Printf("  Container: %d wide x %d high\n", config.ContainerWidth, config.ContainerHeight)
+	fmt.Printf("  Queue size: %d\n", config.QueueSize)
+	fmt.Printf("  Box width: %d-%d\n", config.MinBoxWidth, config.MaxBoxWidth)
+	fmt.Printf("  Box height: %d-%d\n", config.MinBoxHeight, config.MaxBoxHeight)
+	fmt.Printf("  Iterations: %d\n", config.Iterations)
+	fmt.Printf("  Rotation allowed: %t\n", config.AllowBoxRotation)
 }
