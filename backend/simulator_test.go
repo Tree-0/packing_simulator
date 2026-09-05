@@ -35,6 +35,9 @@ func TestRunWithProgressObserverReportsCumulativeResults(t *testing.T) {
 	}
 }
 
+// Early stopping functionality was removed
+
+/*
 func TestRunWithProgressObserverReportsEarlyStop(t *testing.T) {
 	engine := newProgressTestEngine(t, 1, 1)
 	var final backend.SimulationProgress
@@ -54,6 +57,7 @@ func TestRunWithProgressObserverReportsEarlyStop(t *testing.T) {
 		t.Errorf("early-stop result = %+v at timestamp %d", result, final.Timestamp)
 	}
 }
+*/
 
 func TestRunWithProgressObserverZeroIterations(t *testing.T) {
 	engine := newProgressTestEngine(t, 2, 2)
