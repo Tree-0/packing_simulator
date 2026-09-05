@@ -152,7 +152,7 @@ func (eng *SimulationEngine) run(
 		result.Generated++
 		result.Iterations = t + 1
 
-		stopped := false
+		// stopped := false
 		if queue.Full() || t == iterations-1 {
 			batch := queue.Drain()
 			placed, rotated, err := eng.processBatch(t, p, batch)
@@ -163,10 +163,12 @@ func (eng *SimulationEngine) run(
 			result.Placed += placed
 			result.Rotated += rotated
 			result.Rejected += len(batch) - placed
-			if placed == 0 {
-				result.StoppedEarly = true
-				stopped = true
-			}
+			
+			// early stopping if nothing can be placed (see below comment)
+			// if placed == 0 {
+			// 	result.StoppedEarly = true
+			// 	stopped = true
+			// }
 		}
 
 		if observer != nil {
@@ -176,9 +178,14 @@ func (eng *SimulationEngine) run(
 			}
 		}
 
-		if stopped {
-			return result, nil
-		}
+		// We used to stop if no boxes in current queue can be placed.
+		// Now, for the sake of running experiments where every (simulation, policy)
+		// pair receives the same full set of boxes, we mark them as rejected and
+		// continue.
+
+		// if stopped {
+		// 	return result, nil
+		// }
 	}
 
 	return result, nil
