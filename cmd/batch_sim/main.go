@@ -73,13 +73,15 @@ type jobOutcome struct {
 func main() {
 	mode := flag.String("mode", "batch", "the simulation mode we are running: 'batch' or 'experiment'")
 	configPath := flag.String("config", "config/batch_sim/config.yml", "path to the batch simulation YAML config")
+	outputDir := flag.String("output-dir", "", "directory in which to write CSV results; omit to disable CSV output")
 	flag.Parse()
 	if flag.NArg() != 0 {
 		log.Fatalf("unexpected positional arguments: %s", strings.Join(flag.Args(), " "))
 	}
 
-	// Run an experiment on a set of simulation scenarios and aggregate results
-	if *mode == "experiment" {
+	switch *mode {
+	case "experiment":
+		// Run an experiment across multiple workloads and aggregate its results.
 		experimentConfig, err := loadExperimentConfig(*configPath)
 		if err != nil {
 			log.Fatal(err)
@@ -103,8 +105,19 @@ func main() {
 		// display aggregate results
 		PrintAggregateResults(experimentConfig, aggregates)
 
-		// Run a batch of simulations (one workload, multiple seeds and policies)
-	} else if *mode == "batch" {
+		// optionally save results to CSV
+		if *outputDir != "" {
+			paths, err := writeExperimentResultsCSV(*outputDir, results, aggregates)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, path := range paths {
+				fmt.Printf("Wrote CSV results to %s\n", path)
+			}
+		}
+
+	case "batch":
+		// Run one workload across multiple seeds and policies.
 		batchConfig, err := loadConfig(*configPath)
 		if err != nil {
 			log.Fatal(err)
@@ -117,8 +130,16 @@ func main() {
 
 		printResults(results)
 
-		// unrecognized simulation mode type
-	} else {
+		// optionally save results to CSV
+		if *outputDir != "" {
+			path, err := writeBatchResultsCSV(*outputDir, results)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("Wrote CSV results to %s\n", path)
+		}
+
+	default:
 		log.Fatal(
 			fmt.Errorf("Unrecognized simulation mode: got %q, expected 'batch' or 'experiment'", *mode),
 		)

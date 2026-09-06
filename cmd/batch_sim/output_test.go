@@ -1,0 +1,99 @@
+package main
+
+import (
+	"encoding/csv"
+	"os"
+	"reflect"
+	"testing"
+
+	"packing_simulator/backend"
+	"packing_simulator/backend/evaluator"
+)
+
+func TestWriteBatchResultsCSV(t *testing.T) {
+	path, err := writeBatchResultsCSV(t.TempDir(), []batchResult{{
+		policy: "bottom-left",
+		seed:   42,
+		simulation: backend.SimulationResult{
+			Iterations: 4,
+			Generated:  4,
+			Placed:     3,
+			Rejected:   1,
+			Batches:    2,
+		},
+		evaluations: []evaluationResult{{
+			evaluation: evaluator.ContainerUtilization,
+			value:      0.75,
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	records := readCSVRecords(t, path)
+	want := [][]string{
+		{"policy", "seed", "iterations", "generated", "placed", "rotated", "rejected", "batches", "stopped_early", "evaluation", "value"},
+		{"bottom-left", "42", "4", "4", "3", "0", "1", "2", "false", "Container utilization", "0.75"},
+	}
+	if !reflect.DeepEqual(records, want) {
+		t.Errorf("CSV records = %v; want %v", records, want)
+	}
+}
+
+func TestWriteExperimentResultsCSV(t *testing.T) {
+	paths, err := writeExperimentResultsCSV(
+		t.TempDir(),
+		[]RunResult{{
+			WorkloadName: "small",
+			PolicyName:   "bottom-left",
+			Seed:         42,
+			Evaluations: []evaluationResult{{
+				evaluation: evaluator.ContainerUtilization,
+				value:      0.75,
+			}},
+		}},
+		[]AggregateResult{{
+			WorkloadName: "small",
+			PolicyName:   "bottom-left",
+			Evaluation: evaluationResult{
+				evaluation: evaluator.ContainerUtilization,
+				value:      0.75,
+			},
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 2 {
+		t.Fatalf("writeExperimentResultsCSV() returned %d paths; want 2", len(paths))
+	}
+
+	if got, want := readCSVRecords(t, paths[0]), [][]string{
+		{"workload", "policy", "seed", "evaluation", "value"},
+		{"small", "bottom-left", "42", "Container utilization", "0.75"},
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("run CSV records = %v; want %v", got, want)
+	}
+	if got, want := readCSVRecords(t, paths[1]), [][]string{
+		{"workload", "policy", "evaluation", "mean"},
+		{"small", "bottom-left", "Container utilization", "0.75"},
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("aggregate CSV records = %v; want %v", got, want)
+	}
+}
+
+func readCSVRecords(t *testing.T, path string) [][]string {
+	t.Helper()
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	records, err := csv.NewReader(file).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return records
+}
