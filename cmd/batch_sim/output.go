@@ -10,58 +10,6 @@ import (
 	"time"
 )
 
-// writeBatchResultsCSV writes one row for each batch run and evaluation.
-func writeBatchResultsCSV(outputDir string, results []batchResult) (string, error) {
-	path, err := csvOutputPath(outputDir, "batch-results")
-	if err != nil {
-		return "", err
-	}
-
-	sortedResults := append([]batchResult(nil), results...)
-	sort.Slice(sortedResults, func(i, j int) bool {
-		if sortedResults[i].policy != sortedResults[j].policy {
-			return sortedResults[i].policy < sortedResults[j].policy
-		}
-		return sortedResults[i].seed < sortedResults[j].seed
-	})
-
-	err = writeCSV(path, func(writer *csv.Writer) error {
-		if err := writer.Write([]string{
-			"policy", "seed", "iterations", "generated", "placed", "rotated",
-			"rejected", "batches", "stopped_early", "evaluation", "value",
-		}); err != nil {
-			return err
-		}
-
-		for _, result := range sortedResults {
-			for _, evaluation := range result.evaluations {
-				if err := writer.Write([]string{
-					result.policy,
-					strconv.FormatInt(result.seed, 10),
-					strconv.Itoa(result.simulation.Iterations),
-					strconv.Itoa(result.simulation.Generated),
-					strconv.Itoa(result.simulation.Placed),
-					strconv.Itoa(result.simulation.Rotated),
-					strconv.Itoa(result.simulation.Rejected),
-					strconv.Itoa(result.simulation.Batches),
-					strconv.FormatBool(result.simulation.StoppedEarly),
-					evaluation.evaluation.String(),
-					strconv.FormatFloat(evaluation.value, 'g', -1, 64),
-				}); err != nil {
-					return err
-				}
-			}
-		}
-
-		return nil
-	})
-	if err != nil {
-		return "", fmt.Errorf("write batch CSV: %w", err)
-	}
-
-	return path, nil
-}
-
 // writeExperimentResultsCSV writes the individual run results and their
 // aggregate means to separate CSV files.
 func writeExperimentResultsCSV(
@@ -91,7 +39,10 @@ func writeExperimentResultsCSV(
 	})
 
 	if err := writeCSV(runPath, func(writer *csv.Writer) error {
-		if err := writer.Write([]string{"workload", "policy", "seed", "evaluation", "value"}); err != nil {
+		if err := writer.Write([]string{
+			"workload", "policy", "seed", "iterations", "generated", "placed", "rotated",
+			"rejected", "batches", "stopped_early", "evaluation", "value",
+		}); err != nil {
 			return err
 		}
 
@@ -101,6 +52,13 @@ func writeExperimentResultsCSV(
 					result.WorkloadName,
 					result.PolicyName,
 					strconv.FormatInt(result.Seed, 10),
+					strconv.Itoa(result.Simulation.Iterations),
+					strconv.Itoa(result.Simulation.Generated),
+					strconv.Itoa(result.Simulation.Placed),
+					strconv.Itoa(result.Simulation.Rotated),
+					strconv.Itoa(result.Simulation.Rejected),
+					strconv.Itoa(result.Simulation.Batches),
+					strconv.FormatBool(result.Simulation.StoppedEarly),
 					evaluation.evaluation.String(),
 					strconv.FormatFloat(evaluation.value, 'g', -1, 64),
 				}); err != nil {

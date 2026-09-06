@@ -1,8 +1,7 @@
 /*
-Runs batches for multiple different configs and aggregates the results.
-Compares how different policies perform across different packing scenarios
-and evaluation metrics. Includes averages across all seeds for a batch, as
-well as individual-seed comparisons.
+Runs experiments across multiple workloads and aggregates the results.
+Compares policy performance across packing scenarios, evaluation metrics, and
+seeds.
 */
 
 package main
@@ -31,14 +30,15 @@ type experimentConfig struct {
 }
 
 type workloadConfig struct {
-	Name       string                `yaml:"name"`
-	Simulation batchSimulationConfig `yaml:"simulation"`
+	Name       string           `yaml:"name"`
+	Simulation simulationConfig `yaml:"simulation"`
 }
 
 type RunResult struct {
 	WorkloadName string
 	PolicyName   string
 	Seed         int64
+	Simulation   backend.SimulationResult
 	Evaluations  []evaluationResult
 }
 
@@ -139,46 +139,20 @@ func (config experimentConfig) validate() error {
 	return nil
 }
 
-// Run multiple defined batch workloads as part of one experiment, and return the results
+// Run multiple defined workloads as part of one experiment, and return the results
 // from each individual run. There are (Workloads * Policies * Seeds) distinct runs,
 // all of which receive every evaluation type defined in the config.
 func runExperiment(config experimentConfig) ([]RunResult, error) {
-
-	// setup the evaluators
-	evaluations := make([]evaluator.EvaluationType, len(config.Evaluators))
-	for i, name := range config.Evaluators {
-		evaluation, err := evaluator.ParseEvaluation(name)
-		if err != nil {
-			return nil, err
-		}
-		evaluations[i] = evaluation
-	}
 
 	totalSimulations := len(config.Workloads) * len(config.Policies) * len(config.Seeds)
 	runResults := make([]RunResult, 0, totalSimulations)
 
 	for _, workload := range config.Workloads {
-		batchConfig := batchConfig{
-			workload.Simulation,
-			config.Seeds,
-			config.Policies,
-			config.Evaluators,
-			config.Workers,
-		}
-
-		batchResults, err := runBatch(batchConfig)
+		workloadResults, err := runWorkload(workload, config)
 		if err != nil {
-			return nil, fmt.Errorf("run batch for workload %q failed: %w", workload.Name, err)
+			return nil, fmt.Errorf("run workload %q: %w", workload.Name, err)
 		}
-
-		for _, batchResult := range batchResults {
-			runResults = append(runResults, RunResult{
-				workload.Name,
-				batchResult.policy,
-				batchResult.seed,
-				batchResult.evaluations,
-			})
-		}
+		runResults = append(runResults, workloadResults...)
 	}
 
 	return runResults, nil
@@ -206,10 +180,10 @@ func AggregateResults(results []RunResult) ([]AggregateResult, error) {
 				// append a copy of the RunResult with only the single
 				// eval type we care about for this aggregate
 				RunResult{
-					result.WorkloadName,
-					result.PolicyName,
-					result.Seed,
-					[]evaluationResult{eval},
+					WorkloadName: result.WorkloadName,
+					PolicyName:   result.PolicyName,
+					Seed:         result.Seed,
+					Evaluations:  []evaluationResult{eval},
 				},
 			)
 		}
@@ -290,6 +264,15 @@ func PrintRunResults(config experimentConfig, results []RunResult) {
 			result.PolicyName,
 			result.Seed,
 		)
+		fmt.Printf(
+			"  Iterations: %d, generated: %d, placed: %d, rotated: %d, rejected: %d, batches: %d\n",
+			result.Simulation.Iterations,
+			result.Simulation.Generated,
+			result.Simulation.Placed,
+			result.Simulation.Rotated,
+			result.Simulation.Rejected,
+			result.Simulation.Batches,
+		)
 
 		for _, evaluation := range result.Evaluations {
 			switch evaluation.evaluation {
@@ -305,7 +288,7 @@ func PrintRunResults(config experimentConfig, results []RunResult) {
 
 func printWorkload(workload workloadConfig) {
 	fmt.Printf("Workload: %s\n", workload.Name)
-	printBatchSimulationConfig(workload.Simulation)
+	printSimulationConfig(workload.Simulation)
 }
 
 func PrintAggregateResults(config experimentConfig, results []AggregateResult) {

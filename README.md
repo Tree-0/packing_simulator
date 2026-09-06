@@ -22,10 +22,10 @@ Run randomized simulations over time, observe how each policy performs with each
 - `cmd/`
     - `simulate/main.go`: run individual simulations
     - `visualize/main.go`: run and replay an individual simulation in a browser
-    - `batch_sim/main.go`: run groups of simulations for a set of seeds and policies, collect results
+    - `batch_sim/main.go`: run workload experiments across seeds and policies, then aggregate results
 
 - `config/`
-    - `batch_sim/`: YAML files for batch runs, including seeds, policies, evaluators, and workers
+    - `experiment/`: YAML files for one or more workloads (simulation settings), plus shared seeds, policies, evaluators, and # of max concurrent workers
     - `simulate/`: YAML files for individual runs
 
 ### Running simulations
@@ -35,7 +35,7 @@ override values from that file, so this runs one iteration using the configured
 simulation with a different iteration limit:
 
 ```sh
-go run ./cmd/simulate -iterations 1
+go run ./cmd/simulate -iterations 10
 ```
 
 Use another single-run config with `-config`:
@@ -43,6 +43,29 @@ Use another single-run config with `-config`:
 ```sh
 go run ./cmd/simulate -config config/simulate/config.yml -policy largest-area-bottom-left
 ```
+
+---
+
+`batch_sim` loads `config/experiment/config.yml` by default. Every configuration
+uses the same experiment format: it lists one or more named workloads (simulation settings), along
+with shared seeds, policies, evaluators, and worker count. A one-workload file
+is the replacement for the old batch configuration.
+
+```sh
+go run ./cmd/batch_sim \
+  -config config/experiment/config_standard.yml
+```
+
+The runner executes every workload × policy × seed combination, prints both
+individual runs and aggregate means, and can write CSV output:
+
+```sh
+go run ./cmd/batch_sim \
+  -config config/experiment/config_rotate_comparison.yml \
+  -output-dir cmd/batch_sim/outputs
+```
+
+---
 
 ### Browser visualizer
 
@@ -92,8 +115,3 @@ npm run check
 
 This type-checks and tests the components, then rebuilds the embedded `dist`
 assets. Commit the updated bundle along with the React source.
-
-`batch_sim` loads `config/batch_sim/config.yml` by default. Its YAML format is
-different because it specifies multiple seeds, policies, and evaluators. A batch simulation
-runs (number of seeds) * (number of policies) simulations to try all pairwise combinations,
-and applies all evaluators to each.

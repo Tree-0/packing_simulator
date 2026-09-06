@@ -10,36 +10,6 @@ import (
 	"packing_simulator/backend/evaluator"
 )
 
-func TestWriteBatchResultsCSV(t *testing.T) {
-	path, err := writeBatchResultsCSV(t.TempDir(), []batchResult{{
-		policy: "bottom-left",
-		seed:   42,
-		simulation: backend.SimulationResult{
-			Iterations: 4,
-			Generated:  4,
-			Placed:     3,
-			Rejected:   1,
-			Batches:    2,
-		},
-		evaluations: []evaluationResult{{
-			evaluation: evaluator.ContainerUtilization,
-			value:      0.75,
-		}},
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	records := readCSVRecords(t, path)
-	want := [][]string{
-		{"policy", "seed", "iterations", "generated", "placed", "rotated", "rejected", "batches", "stopped_early", "evaluation", "value"},
-		{"bottom-left", "42", "4", "4", "3", "0", "1", "2", "false", "Container utilization", "0.75"},
-	}
-	if !reflect.DeepEqual(records, want) {
-		t.Errorf("CSV records = %v; want %v", records, want)
-	}
-}
-
 func TestWriteExperimentResultsCSV(t *testing.T) {
 	paths, err := writeExperimentResultsCSV(
 		t.TempDir(),
@@ -47,6 +17,13 @@ func TestWriteExperimentResultsCSV(t *testing.T) {
 			WorkloadName: "small",
 			PolicyName:   "bottom-left",
 			Seed:         42,
+			Simulation: backend.SimulationResult{
+				Iterations: 4,
+				Generated:  4,
+				Placed:     3,
+				Rejected:   1,
+				Batches:    2,
+			},
 			Evaluations: []evaluationResult{{
 				evaluation: evaluator.ContainerUtilization,
 				value:      0.75,
@@ -69,8 +46,8 @@ func TestWriteExperimentResultsCSV(t *testing.T) {
 	}
 
 	if got, want := readCSVRecords(t, paths[0]), [][]string{
-		{"workload", "policy", "seed", "evaluation", "value"},
-		{"small", "bottom-left", "42", "Container utilization", "0.75"},
+		{"workload", "policy", "seed", "iterations", "generated", "placed", "rotated", "rejected", "batches", "stopped_early", "evaluation", "value"},
+		{"small", "bottom-left", "42", "4", "4", "3", "0", "1", "2", "false", "Container utilization", "0.75"},
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("run CSV records = %v; want %v", got, want)
 	}

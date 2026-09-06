@@ -9,9 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -19,22 +17,9 @@ import (
 	"packing_simulator/backend"
 	"packing_simulator/backend/evaluator"
 	"packing_simulator/backend/policy"
-
-	"gopkg.in/yaml.v3"
 )
 
-// batchConfig is the YAML representation of a set of comparable simulations.
-// Each policy is run once per seed; all selected evaluators are then applied to
-// that completed simulation.
-type batchConfig struct {
-	Simulation batchSimulationConfig `yaml:"simulation"`
-	Seeds      []int64               `yaml:"seeds"`
-	Policies   []string              `yaml:"policies"`
-	Evaluators []string              `yaml:"evaluators"`
-	Workers    int                   `yaml:"workers"`
-}
-
-type batchSimulationConfig struct {
+type simulationConfig struct {
 	ContainerHeight  int  `yaml:"container_height"`
 	ContainerWidth   int  `yaml:"container_width"`
 	QueueSize        int  `yaml:"queue_size"`
@@ -46,7 +31,7 @@ type batchSimulationConfig struct {
 	AllowBoxRotation bool `yaml:"allow_box_rotation"`
 }
 
-type batchJob struct {
+type workloadJob struct {
 	index      int
 	policyName string
 	seed       int64
@@ -57,163 +42,49 @@ type evaluationResult struct {
 	value      float64
 }
 
-type batchResult struct {
-	policy      string
-	seed        int64
-	simulation  backend.SimulationResult
-	evaluations []evaluationResult
-}
-
 type jobOutcome struct {
 	index  int
-	result batchResult
+	result RunResult
 	err    error
 }
 
 func main() {
-	mode := flag.String("mode", "batch", "the simulation mode we are running: 'batch' or 'experiment'")
-	configPath := flag.String("config", "config/batch_sim/config.yml", "path to the batch simulation YAML config")
+	configPath := flag.String("config", "config/experiment/config.yml", "path to the experiment YAML config")
 	outputDir := flag.String("output-dir", "", "directory in which to write CSV results; omit to disable CSV output")
 	flag.Parse()
 	if flag.NArg() != 0 {
 		log.Fatalf("unexpected positional arguments: %s", strings.Join(flag.Args(), " "))
 	}
 
-	switch *mode {
-	case "experiment":
-		// Run an experiment across multiple workloads and aggregate its results.
-		experimentConfig, err := loadExperimentConfig(*configPath)
+	config, err := loadExperimentConfig(*configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	results, err := runExperiment(config)
+	if err != nil {
+		log.Fatal(err)
+	}
+	PrintRunResults(config, results)
+
+	aggregates, err := AggregateResults(results)
+	if err != nil {
+		log.Fatal(err)
+	}
+	PrintAggregateResults(config, aggregates)
+
+	if *outputDir != "" {
+		paths, err := writeExperimentResultsCSV(*outputDir, results, aggregates)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		// run multiple different batches (different simulation parameters)
-		// on the same set of policies, seeds, and evaluators
-		results, err := runExperiment(experimentConfig)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// display experiment results
-		PrintRunResults(experimentConfig, results)
-
-		aggregates, err := AggregateResults(results)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// display aggregate results
-		PrintAggregateResults(experimentConfig, aggregates)
-
-		// optionally save results to CSV
-		if *outputDir != "" {
-			paths, err := writeExperimentResultsCSV(*outputDir, results, aggregates)
-			if err != nil {
-				log.Fatal(err)
-			}
-			for _, path := range paths {
-				fmt.Printf("Wrote CSV results to %s\n", path)
-			}
-		}
-
-	case "batch":
-		// Run one workload across multiple seeds and policies.
-		batchConfig, err := loadConfig(*configPath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		results, err := runBatch(batchConfig)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		printResults(results)
-
-		// optionally save results to CSV
-		if *outputDir != "" {
-			path, err := writeBatchResultsCSV(*outputDir, results)
-			if err != nil {
-				log.Fatal(err)
-			}
+		for _, path := range paths {
 			fmt.Printf("Wrote CSV results to %s\n", path)
 		}
-
-	default:
-		log.Fatal(
-			fmt.Errorf("Unrecognized simulation mode: got %q, expected 'batch' or 'experiment'", *mode),
-		)
 	}
 }
 
-// loadConfig reads and validates one YAML configuration file. A relative path
-// is intentionally interpreted relative to the process's current directory.
-func loadConfig(path string) (batchConfig, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return batchConfig{}, fmt.Errorf("open config %q: %w", path, err)
-	}
-	defer file.Close()
-
-	decoder := yaml.NewDecoder(file)
-	decoder.KnownFields(true)
-
-	var config batchConfig
-	if err := decoder.Decode(&config); err != nil {
-		return batchConfig{}, fmt.Errorf("decode config %q: %w", path, err)
-	}
-
-	var extraDocument any
-	if err := decoder.Decode(&extraDocument); err != io.EOF {
-		if err == nil {
-			return batchConfig{}, fmt.Errorf("decode config %q: multiple YAML documents are not supported", path)
-		}
-		return batchConfig{}, fmt.Errorf("decode config %q: %w", path, err)
-	}
-
-	if err := config.validate(); err != nil {
-		return batchConfig{}, fmt.Errorf("invalid config %q: %w", path, err)
-	}
-
-	return config, nil
-}
-
-func (config batchConfig) validate() error {
-	if len(config.Seeds) == 0 {
-		return errors.New("at least one seed is required")
-	}
-	if len(config.Policies) == 0 {
-		return errors.New("at least one policy is required")
-	}
-	if len(config.Evaluators) == 0 {
-		return errors.New("at least one evaluator is required")
-	}
-	if config.Workers < 0 {
-		return errors.New("workers cannot be negative")
-	}
-	if config.Simulation.Iterations < 0 {
-		return errors.New("simulation.iterations cannot be negative")
-	}
-
-	if _, err := backend.NewSimulationEngine(config.Simulation.toBackendConfig(config.Seeds[0])); err != nil {
-		return fmt.Errorf("simulation: %w", err)
-	}
-
-	for _, name := range config.Policies {
-		if _, err := policy.NewPolicy(name); err != nil {
-			return err
-		}
-	}
-	for _, name := range config.Evaluators {
-		if _, err := evaluator.ParseEvaluation(name); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (config batchSimulationConfig) toBackendConfig(seed int64) backend.SimulationConfig {
+func (config simulationConfig) toBackendConfig(seed int64) backend.SimulationConfig {
 	return backend.SimulationConfig{
 		ContainerHeight:  config.ContainerHeight,
 		ContainerWidth:   config.ContainerWidth,
@@ -227,7 +98,7 @@ func (config batchSimulationConfig) toBackendConfig(seed int64) backend.Simulati
 	}
 }
 
-func runBatch(config batchConfig) ([]batchResult, error) {
+func runWorkload(workload workloadConfig, config experimentConfig) ([]RunResult, error) {
 	evaluations := make([]evaluator.EvaluationType, len(config.Evaluators))
 	for i, name := range config.Evaluators {
 		evaluation, err := evaluator.ParseEvaluation(name)
@@ -237,11 +108,11 @@ func runBatch(config batchConfig) ([]batchResult, error) {
 		evaluations[i] = evaluation
 	}
 
-	// create jobs for all combinations of (policy, seed)
-	jobs := make([]batchJob, 0, len(config.Policies)*len(config.Seeds))
+	// Create jobs for all combinations of policy and seed for this workload.
+	jobs := make([]workloadJob, 0, len(config.Policies)*len(config.Seeds))
 	for _, policyName := range config.Policies {
 		for _, seed := range config.Seeds {
-			jobs = append(jobs, batchJob{
+			jobs = append(jobs, workloadJob{
 				index:      len(jobs),
 				policyName: policyName,
 				seed:       seed,
@@ -258,7 +129,7 @@ func runBatch(config batchConfig) ([]batchResult, error) {
 	}
 
 	// unbuffered; producer waits until worker is available to send a job
-	jobQueue := make(chan batchJob)
+	jobQueue := make(chan workloadJob)
 	// buffered; can receive outcomes without waiting for a collector to consume the results
 	outcomes := make(chan jobOutcome, len(jobs))
 
@@ -271,7 +142,7 @@ func runBatch(config batchConfig) ([]batchResult, error) {
 		go func() {
 			defer workersDone.Done()
 			for job := range jobQueue { // waits for work
-				result, err := runJob(config.Simulation, evaluations, job)
+				result, err := runJob(workload.Name, workload.Simulation, evaluations, job)
 				outcomes <- jobOutcome{index: job.index, result: result, err: err}
 			}
 		}()
@@ -290,7 +161,7 @@ func runBatch(config batchConfig) ([]batchResult, error) {
 	}()
 
 	// 3. collect results from the outcome channel's buffer
-	results := make([]batchResult, len(jobs))
+	results := make([]RunResult, len(jobs))
 	var jobErrors []error
 	for outcome := range outcomes {
 		if outcome.err != nil {
@@ -307,33 +178,35 @@ func runBatch(config batchConfig) ([]batchResult, error) {
 }
 
 func runJob(
-	simulationConfig batchSimulationConfig,
+	workloadName string,
+	simulationConfig simulationConfig,
 	evaluations []evaluator.EvaluationType,
-	job batchJob,
-) (batchResult, error) {
+	job workloadJob,
+) (RunResult, error) {
 	engine, err := backend.NewSimulationEngine(simulationConfig.toBackendConfig(job.seed))
 	if err != nil {
-		return batchResult{}, fmt.Errorf("policy %q, seed %d: create engine: %w", job.policyName, job.seed, err)
+		return RunResult{}, fmt.Errorf("policy %q, seed %d: create engine: %w", job.policyName, job.seed, err)
 	}
 
 	policy, err := policy.NewPolicy(job.policyName)
 	if err != nil {
-		return batchResult{}, fmt.Errorf("policy %q, seed %d: %w", job.policyName, job.seed, err)
+		return RunResult{}, fmt.Errorf("policy %q, seed %d: %w", job.policyName, job.seed, err)
 	}
 
 	simulation, err := engine.Run(policy, simulationConfig.Iterations)
 	if err != nil {
-		return batchResult{}, fmt.Errorf("policy %q, seed %d: run simulation: %w", job.policyName, job.seed, err)
+		return RunResult{}, fmt.Errorf("policy %q, seed %d: run simulation: %w", job.policyName, job.seed, err)
 	}
 
-	result := batchResult{
-		policy:      policy.Name(),
-		seed:        job.seed,
-		simulation:  simulation,
-		evaluations: make([]evaluationResult, len(evaluations)),
+	result := RunResult{
+		WorkloadName: workloadName,
+		PolicyName:   policy.Name(),
+		Seed:         job.seed,
+		Simulation:   simulation,
+		Evaluations:  make([]evaluationResult, len(evaluations)),
 	}
 	for i, evaluation := range evaluations {
-		result.evaluations[i] = evaluationResult{
+		result.Evaluations[i] = evaluationResult{
 			evaluation: evaluation,
 			value:      evaluator.EvaluateSimulation(engine, evaluation),
 		}
@@ -341,36 +214,7 @@ func runJob(
 
 	return result, nil
 }
-
-func printResults(results []batchResult) {
-	for _, result := range results {
-		fmt.Printf("Policy: %s  Seed: %d\n", result.policy, result.seed)
-		fmt.Printf(
-			"  Iterations: %d, generated: %d, placed: %d, rotated: %d, rejected: %d, batches: %d\n",
-			result.simulation.Iterations,
-			result.simulation.Generated,
-			result.simulation.Placed,
-			result.simulation.Rotated,
-			result.simulation.Rejected,
-			result.simulation.Batches,
-		)
-		if result.simulation.StoppedEarly {
-			fmt.Println("  Stopped early: no box in a batch could be placed.")
-		}
-
-		for _, evaluation := range result.evaluations {
-			switch evaluation.evaluation {
-			case evaluator.ContainerUtilization, evaluator.FutureFitProbabilityMetric:
-				fmt.Printf("  %-24s %.1f%%\n", evaluation.evaluation, 100*evaluation.value)
-			default:
-				fmt.Printf("  %-24s %.4f\n", evaluation.evaluation, evaluation.value)
-			}
-		}
-		fmt.Println()
-	}
-}
-
-func printBatchSimulationConfig(config batchSimulationConfig) {
+func printSimulationConfig(config simulationConfig) {
 	fmt.Println("Simulation configuration:")
 	fmt.Printf("  Container: %d wide x %d high\n", config.ContainerWidth, config.ContainerHeight)
 	fmt.Printf("  Queue size: %d\n", config.QueueSize)

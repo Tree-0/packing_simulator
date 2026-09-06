@@ -42,6 +42,9 @@ func TestRunExperimentProducesResultsForEveryCombination(t *testing.T) {
 		if len(result.Evaluations) != len(config.Evaluators) {
 			t.Errorf("result %s has %d evaluations; want %d", key, len(result.Evaluations), len(config.Evaluators))
 		}
+		if result.Simulation.Iterations != 3 || result.Simulation.Generated != 3 {
+			t.Errorf("result %s simulation = %+v; want three generated iterations", key, result.Simulation)
+		}
 
 		gotEvaluationTypes := make(map[evaluator.EvaluationType]bool, len(result.Evaluations))
 		for _, evaluation := range result.Evaluations {
@@ -110,8 +113,8 @@ func TestAggregateResultsCalculatesMeansPerWorkloadPolicyAndEvaluation(t *testin
 	}
 }
 
-func testSimulationConfig(maxWidth, maxHeight int) batchSimulationConfig {
-	return batchSimulationConfig{
+func testSimulationConfig(maxWidth, maxHeight int) simulationConfig {
+	return simulationConfig{
 		ContainerHeight:  4,
 		ContainerWidth:   4,
 		QueueSize:        1,

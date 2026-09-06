@@ -2,18 +2,24 @@
 I would revise the roadmap into this sequence:
 1. Formalize the problem, information available to policies, termination rule, and primary objectives.
 2. Make workloads identical across policies and produce machine-readable experimental results.
+    - [X] It might make sense to standardize the batch config and experiment configs to be the same.
+    - [X] I still need to make the workloads identical across policies.
+
 3. Add statistical aggregation, runtime measurements, and multiple workload families.
+
 4. Separate ordering, bin-selection, and within-bin placement strategies.
 5. Implement several established 2D heuristics.
 6. Add a small-instance exact model and report optimality gaps.
+
 7. Introduce multiple containers and minimize bins used.
 8. Add simple structural-support constraints.
+
 9. Profile and experiment with bitsets, skyline, and maximal-empty-rectangle representations.
 10. Explore stochastic arrivals/departures, continuous coordinates, local search, or 3D according to which subject interests you most.
 The strongest next milestone is therefore not another geometric feature. It is an experiment harness that can answer: “Under this workload, how much quality does this heuristic sacrifice, how much faster is it, and how confident am I in that conclusion?” Once you have that, every subsequent feature becomes an optimization experiment rather than merely an implementation exercise.
 
 # Brainstorming
-- [ ] Refactor backend into `evaluator`, `policy`, other packages as needed... they are going to grow
+- [X] Refactor backend into `evaluator`, `policy`, other packages as needed... they are going to grow
 
 - [ ] Add an option to have multiple containers (fixed config container-count, OR minimize bins needed. TWO DIFFERENT PROBLEMS)
     - Implement heuristics for the more standard version of the bin-packing problem
