@@ -35,7 +35,7 @@ workloads:
       iterations: 100
       allow_box_rotation: true
 
-seeds: [42, 43, 44]
+seeds: [42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52]
 policies:
   - bottom-left
   - largest-area-bottom-left
@@ -43,5 +43,6 @@ policies:
 evaluators:
   - utilization
   - fragmentation
+  - future-fit-probability
 
 workers: 0
