@@ -14,15 +14,15 @@ Run randomized simulations over time, observe how each policy performs with each
     - `simulator`: Owns time and event processing
     - `world`: The simulation model space - grid, placed boxes, queue
     - `generator`: Creates box-arrival events
-    - `policy_*`: Different packing policies
-    - `evaluator_*`: Measures policy performance
+    - `policy/`: Different packing policies
+    - `evaluator/`: Measures policy performance
 
 - `frontend/`: Record simulation snapshots and serve the React visualizer
 
 - `cmd/`
     - `simulate/main.go`: run individual simulations
     - `visualize/main.go`: run and replay an individual simulation in a browser
-    - `batch_sim/main.go`: run workload experiments across seeds and policies, then aggregate results
+    - `batch_sim/main.go`: run experiments for multiple simulation settings across seeds and policies, then aggregate results
 
 - `config/`
     - `experiment/`: YAML files for one or more workloads (simulation settings), plus shared seeds, policies, evaluators, and # of max concurrent workers
@@ -64,6 +64,10 @@ go run ./cmd/batch_sim \
   -config config/experiment/config_rotate_comparison.yml \
   -output-dir cmd/batch_sim/outputs
 ```
+
+Charts displaying experiment results can be generated with 
+`cmd/batch_sim/plot_experiments.py`. Data used defaults to the most recent
+CSV files generated in `cmd/batch_sim/outputs/`.
 
 ---
 
