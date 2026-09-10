@@ -11,6 +11,8 @@ workloads:
       iterations: 100
       allow_box_rotation: true
 
+max_containers: 1
+
 seeds: [42, 43, 44, 45, 46]
 policies:
   - bottom-left
