@@ -63,13 +63,13 @@ func main() {
 					len(world.Queue.Items),
 					world.Queue.Limit,
 				)
-				return printContainer(&world.Container)
+				return printContainers(world.Containers)
 			},
 		)
 		fmt.Print("\033[?25h") // Restore the cursor before reporting errors.
 		if firstFrame && err == nil {
 			fmt.Print("\033[2J\033[H")
-			err = printContainer(&engine.World().Container)
+			err = printContainers(engine.World().Containers)
 		}
 		fmt.Println()
 	} else {
@@ -107,7 +107,7 @@ func main() {
 	fmt.Println()
 
 	if *animate < 0 {
-		if err := printContainer(&engine.World().Container); err != nil {
+		if err := printContainers(engine.World().Containers); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -131,4 +131,15 @@ func printContainer(container *backend.Container) error {
 	}
 
 	return nil
+}
+
+func printContainers(containers []*backend.Container) error {
+    for _, container := range containers {
+        fmt.Printf("Container %d:\n", container.Id()) // or index if no ID accessor
+        if err := printContainer(container); err != nil {
+            return err
+        }
+        fmt.Println()
+    }
+    return nil
 }
