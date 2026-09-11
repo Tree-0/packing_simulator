@@ -15,11 +15,11 @@ Need policies to do the following, in order:
 
 #### Online Algorithms
 **Some simpler policies:**
-- [ ] Next Fit:
+- [X] Next Fit:
     - Keeps one bin open at a time. When next item doesn't fit, close the bin and open a new one.
-- [ ] Next-K Fit:
+- [X] Next-K Fit:
     - Keep the last `k` bins open, choose first bin where item fits.
-- [ ] First-Fit:
+- [X] First-Fit:
     - Keep all bins open.
 - [ ] Best-Fit:
     - keep all bins open. Attempts to place each new item into the bin with MAXIMUM load (some objective function I will have to define, maybe just utilization?)

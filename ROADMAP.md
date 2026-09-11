@@ -15,6 +15,9 @@
     - [ ] Add max_containers field to config 
     - [ ] Add support for parsing field from config, and default to -1 (unbounded) if field is missing
     - [ ] Give containers IDs and change world to have []*Container
+    - [ ] Status type in PlacementDecision for when no previous bin was available, and a new one must be opened
+    - [ ] Add test equivalents that use more than one container
+        - [ ] Adapt existing one-container tests to the refactor
 
 8. Add simple structural-support constraints.
 
