@@ -25,6 +25,7 @@ type File struct {
 type Simulation struct {
 	ContainerHeight  int   `yaml:"container_height"`
 	ContainerWidth   int   `yaml:"container_width"`
+	MaxContainers    int   `yaml:"max_containers"`
 	QueueSize        int   `yaml:"queue_size"`
 	MinBoxHeight     int   `yaml:"min_box_height"`
 	MaxBoxHeight     int   `yaml:"max_box_height"`
@@ -40,6 +41,7 @@ type Flags struct {
 	ConfigPath       *string
 	Height           *int
 	Width            *int
+	MaxContainers    *int
 	QueueSize        *int
 	MinBoxHeight     *int
 	MaxBoxHeight     *int
@@ -58,6 +60,7 @@ func BindFlags(fs *flag.FlagSet, configPath string, config File) Flags {
 		ConfigPath:       fs.String("config", configPath, "path to the single-simulation YAML config"),
 		Height:           fs.Int("height", config.Simulation.ContainerHeight, "container height"),
 		Width:            fs.Int("width", config.Simulation.ContainerWidth, "container width"),
+		MaxContainers:    fs.Int("max-containers", config.Simulation.MaxContainers, "maximum containers; use -1 for no limit"),
 		QueueSize:        fs.Int("queue-size", config.Simulation.QueueSize, "number of boxes processed per batch"),
 		MinBoxHeight:     fs.Int("min-box-height", config.Simulation.MinBoxHeight, "minimum random box height"),
 		MaxBoxHeight:     fs.Int("max-box-height", config.Simulation.MaxBoxHeight, "maximum random box height"),
@@ -74,6 +77,7 @@ func (values Flags) BackendConfig() backend.SimulationConfig {
 	return backend.SimulationConfig{
 		ContainerHeight:  *values.Height,
 		ContainerWidth:   *values.Width,
+		MaxContainers:    *values.MaxContainers,
 		QueueSize:        *values.QueueSize,
 		MinBoxHeight:     *values.MinBoxHeight,
 		MaxBoxHeight:     *values.MaxBoxHeight,

@@ -84,10 +84,11 @@ func main() {
 	}
 }
 
-func (config simulationConfig) toBackendConfig(seed int64) backend.SimulationConfig {
+func (config simulationConfig) toBackendConfig(seed int64, maxContainers int) backend.SimulationConfig {
 	return backend.SimulationConfig{
 		ContainerHeight:  config.ContainerHeight,
 		ContainerWidth:   config.ContainerWidth,
+		MaxContainers:    maxContainers,
 		QueueSize:        config.QueueSize,
 		MinBoxHeight:     config.MinBoxHeight,
 		MaxBoxHeight:     config.MaxBoxHeight,
@@ -142,7 +143,7 @@ func runWorkload(workload workloadConfig, config experimentConfig) ([]RunResult,
 		go func() {
 			defer workersDone.Done()
 			for job := range jobQueue { // waits for work
-				result, err := runJob(workload.Name, workload.Simulation, evaluations, job)
+				result, err := runJob(workload.Name, workload.Simulation, config.MaxContainers, evaluations, job)
 				outcomes <- jobOutcome{index: job.index, result: result, err: err}
 			}
 		}()
@@ -180,10 +181,11 @@ func runWorkload(workload workloadConfig, config experimentConfig) ([]RunResult,
 func runJob(
 	workloadName string,
 	simulationConfig simulationConfig,
+	maxContainers int,
 	evaluations []evaluator.EvaluationType,
 	job workloadJob,
 ) (RunResult, error) {
-	engine, err := backend.NewSimulationEngine(simulationConfig.toBackendConfig(job.seed))
+	engine, err := backend.NewSimulationEngine(simulationConfig.toBackendConfig(job.seed, maxContainers))
 	if err != nil {
 		return RunResult{}, fmt.Errorf("policy %q, seed %d: create engine: %w", job.policyName, job.seed, err)
 	}

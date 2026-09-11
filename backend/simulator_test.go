@@ -89,11 +89,89 @@ func TestRunWithProgressObserverWrapsErrors(t *testing.T) {
 	}
 }
 
+func TestRunAllocatesContainerWhenExistingContainersCannotFit(t *testing.T) {
+	engine := newContainerLimitTestEngine(t, 2)
+
+	result, err := engine.Run(policy.ContainerSelectorFirstFit{}, newBottomLeftPolicy(t), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Placed != 2 || result.Rejected != 0 {
+		t.Fatalf("result = %+v; want two placements and no rejections", result)
+	}
+	if got := len(engine.World().Containers); got != 2 {
+		t.Fatalf("container count = %d; want 2", got)
+	}
+	for index, wantBoxID := range []int{1, 2} {
+		container := engine.World().Containers[index]
+		if container.Id() != index+1 {
+			t.Errorf("container %d ID = %d; want %d", index, container.Id(), index+1)
+		}
+		cell, err := container.Cell(0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cell != wantBoxID {
+			t.Errorf("container %d Cell(0, 0) = %d; want box %d", index+1, cell, wantBoxID)
+		}
+	}
+}
+
+func TestRunRejectsBoxWhenContainerLimitIsReached(t *testing.T) {
+	engine := newContainerLimitTestEngine(t, 1)
+
+	result, err := engine.Run(policy.ContainerSelectorFirstFit{}, newBottomLeftPolicy(t), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Placed != 1 || result.Rejected != 1 {
+		t.Fatalf("result = %+v; want one placement and one rejection", result)
+	}
+	if got := len(engine.World().Containers); got != 1 {
+		t.Errorf("container count = %d; want 1", got)
+	}
+}
+
+func TestNewSimulationEngineRejectsInvalidContainerLimit(t *testing.T) {
+	_, err := backend.NewSimulationEngine(backend.SimulationConfig{
+		ContainerHeight: 1,
+		ContainerWidth:  1,
+		MaxContainers:   -2,
+		QueueSize:       1,
+		MinBoxHeight:    1,
+		MaxBoxHeight:    1,
+		MinBoxWidth:     1,
+		MaxBoxWidth:     1,
+	})
+	if err == nil {
+		t.Fatal("NewSimulationEngine() accepted a max container value below -1")
+	}
+}
+
 func newProgressTestEngine(t *testing.T, height, width int) *backend.SimulationEngine {
 	t.Helper()
 	engine, err := backend.NewSimulationEngine(backend.SimulationConfig{
 		ContainerHeight: height,
 		ContainerWidth:  width,
+		QueueSize:       1,
+		MinBoxHeight:    1,
+		MaxBoxHeight:    1,
+		MinBoxWidth:     1,
+		MaxBoxWidth:     1,
+		Seed:            1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return engine
+}
+
+func newContainerLimitTestEngine(t *testing.T, maxContainers int) *backend.SimulationEngine {
+	t.Helper()
+	engine, err := backend.NewSimulationEngine(backend.SimulationConfig{
+		ContainerHeight: 1,
+		ContainerWidth:  1,
+		MaxContainers:   maxContainers,
 		QueueSize:       1,
 		MinBoxHeight:    1,
 		MaxBoxHeight:    1,

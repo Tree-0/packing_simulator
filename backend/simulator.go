@@ -11,8 +11,12 @@ import (
 )
 
 type SimulationConfig struct {
-	ContainerHeight  int
-	ContainerWidth   int
+	ContainerHeight int
+	ContainerWidth  int
+	// MaxContainers limits the total number of containers. -1 is unbounded;
+	// zero is also treated as unbounded for backwards-compatible zero-value
+	// configuration literals.
+	MaxContainers    int
 	QueueSize        int
 	MinBoxHeight     int
 	MaxBoxHeight     int
@@ -47,14 +51,21 @@ type SimulationProgress struct {
 type ProgressObserver func(progress SimulationProgress, world *World) error
 
 type SimulationEngine struct {
-	world        *World
-	generator    BoxGenerator
-	distribution UniformBoxDistribution
+	world           *World
+	generator       BoxGenerator
+	distribution    UniformBoxDistribution
+	containerHeight int
+	containerWidth  int
+	maxContainers   int
 }
 
 func NewSimulationEngine(config SimulationConfig) (*SimulationEngine, error) {
 	if config.MaxBoxHeight > config.ContainerHeight || config.MaxBoxWidth > config.ContainerWidth {
 		return nil, errors.New("maximum box dimensions cannot exceed container dimensions")
+	}
+	maxContainers, err := normalizedMaxContainers(config.MaxContainers)
+	if err != nil {
+		return nil, err
 	}
 
 	world, err := NewWorld(config.ContainerHeight, config.ContainerWidth, config.QueueSize)
@@ -82,10 +93,23 @@ func NewSimulationEngine(config SimulationConfig) (*SimulationEngine, error) {
 	}
 
 	return &SimulationEngine{
-		world:        world,
-		generator:    generator,
-		distribution: distribution,
+		world:           world,
+		generator:       generator,
+		distribution:    distribution,
+		containerHeight: config.ContainerHeight,
+		containerWidth:  config.ContainerWidth,
+		maxContainers:   maxContainers,
 	}, nil
+}
+
+func normalizedMaxContainers(maxContainers int) (int, error) {
+	if maxContainers == 0 {
+		return -1, nil
+	}
+	if maxContainers < -1 {
+		return 0, errors.New("max containers must be -1 (unbounded) or positive")
+	}
+	return maxContainers, nil
 }
 
 func (eng *SimulationEngine) World() *World {
@@ -139,6 +163,9 @@ func (eng *SimulationEngine) run(
 	result := SimulationResult{}
 	if eng == nil || eng.world == nil || eng.generator == nil {
 		return result, errors.New("simulation engine is not initialized")
+	}
+	if cs == nil {
+		return result, errors.New("container selector is required")
 	}
 	if p == nil {
 		return result, errors.New("policy is required")
@@ -229,72 +256,85 @@ func (eng *SimulationEngine) processBatch(
 				return placed, rotated, fmt.Errorf("container selector returned unknown container ID %d: %w", containerID, err)
 			}
 
-			placementContext := PlacementContext{
-				Timestamp: t,
-				Container: container.ContainerSnapshot(),
-				Batch:     append([]QueuedBox(nil), remaining...),
+			found, wasRotated, err := eng.placeInContainer(t, p, container, remaining, queued)
+			if err != nil {
+				return placed, rotated, err
 			}
-			decision, found := p.FindPlacement(placementContext, queued.Box)
-			if !found {
-				continue
-			}
-
-			box := queued.Box
-			// Rotate the box if the placement demands
-			if decision.Rotated {
-				box, err = queued.Box.TryRotate()
-				if err != nil {
-					return placed, rotated, fmt.Errorf("policy %q produced a rotated decision for an unrotatable box %d: %w",
-						p.Name(), queued.Box.ID, err)
+			if found {
+				placed++
+				if wasRotated {
+					rotated++
 				}
+				boxPlaced = true
+				break
 			}
-
-			if err := container.Place(box, decision.Point.X, decision.Point.Y, decision.Rotated); err != nil {
-				return placed, rotated, fmt.Errorf("policy %q produced an invalid placement for box %d: %w", p.Name(), queued.Box.ID, err)
-			}
-
-			placed++
-			if decision.Rotated {
-				rotated++
-			}
-			boxPlaced = true
-			break
 		}
 
-		// We couldn't place box into an existing container, so allocate new
-		// TODO: verify logic here
-		// TODO: add a test to verify a new container gets added when a box cannot fit into any previous containers
-		// TODO: abstract the placement context construction and actual placement into a helper?
-		// I think there might be some redundancy with the logic in the container loop above, but with
-		// error propagation and passing arguments down maybe it wouldn't be much cleaner...
-		if !boxPlaced {
-			container, err := eng.World().NewContainer(
-				eng.World().Containers[0].Height(),
-				eng.World().Containers[0].Width(),
-			)
-			if err != nil {
-				return placed, rotated, fmt.Errorf(
-					"Unable to allocate new container after being unable to place box into existing container",
-				)
-			}
+		// If this box could not be placed in any existing container
+		// AND we can't put it in a new one, skip to the next box in the batch
+		if boxPlaced || !eng.canAllocateContainer() {
+			continue
+		}
 
-			placementContext := PlacementContext{
-				Timestamp: t,
-				Container: container.ContainerSnapshot(),
-				Batch: 	   append([]QueuedBox(nil), remaining...),
-			}
-			box := queued.Box
-			decision, _ := p.FindPlacement(placementContext, box) // ignoring found bc container is newly allocated and empty
-			if err := container.Place(box, decision.Point.X, decision.Point.Y, decision.Rotated); err != nil {
-				return placed, rotated, fmt.Errorf("policy %q produced an invalid placement for box %d: %w", p.Name(), queued.Box.ID, err)
-			}
+		// must make a new container to place the box
+		container, err := eng.World().NewContainer(eng.containerHeight, eng.containerWidth)
+		if err != nil {
+			return placed, rotated, fmt.Errorf("allocate a new container: %w", err)
+		}
 
-			placed++
-			if decision.Rotated {
-				rotated++
-			}
+		found, wasRotated, err := eng.placeInContainer(t, p, container, remaining, queued)
+		if err != nil {
+			return placed, rotated, err
+		}
+		if !found {
+			return placed, rotated, fmt.Errorf("policy %q found no placement for box %d in a new empty container", p.Name(), queued.Box.ID)
+		}
+
+		placed++
+		if wasRotated {
+			rotated++
 		}
 	}
 
 	return placed, rotated, nil
+}
+
+func (eng *SimulationEngine) canAllocateContainer() bool {
+	return eng.maxContainers < 0 || len(eng.world.Containers) < eng.maxContainers
+}
+
+// placeInContainer asks the placement policy for a position in container and,
+// when found, places the box there. It returns whether a placement was found,
+// whether that placement rotated the box, and any policy or placement error.
+func (eng *SimulationEngine) placeInContainer(
+	t int,
+	p PlacementPolicy,
+	container *Container,
+	remaining []QueuedBox,
+	queued QueuedBox,
+) (bool, bool, error) {
+	placementContext := PlacementContext{
+		Timestamp: t,
+		Container: container.ContainerSnapshot(),
+		Batch:     append([]QueuedBox(nil), remaining...),
+	}
+	decision, found := p.FindPlacement(placementContext, queued.Box)
+	if !found {
+		return false, false, nil
+	}
+
+	box := queued.Box
+	if decision.Rotated {
+		var err error
+		box, err = queued.Box.TryRotate()
+		if err != nil {
+			return false, false, fmt.Errorf("policy %q produced a rotated decision for an unrotatable box %d: %w", p.Name(), queued.Box.ID, err)
+		}
+	}
+
+	if err := container.Place(box, decision.Point.X, decision.Point.Y, decision.Rotated); err != nil {
+		return false, false, fmt.Errorf("policy %q produced an invalid placement for box %d: %w", p.Name(), queued.Box.ID, err)
+	}
+
+	return true, decision.Rotated, nil
 }

@@ -22,11 +22,12 @@ import (
 
 // configs to determine how the experiment will be run
 type experimentConfig struct {
-	Workloads  []workloadConfig `yaml:"workloads"`
-	Seeds      []int64          `yaml:"seeds"`
-	Policies   []string         `yaml:"policies"`
-	Evaluators []string         `yaml:"evaluators"`
-	Workers    int              `yaml:"workers"`
+	Workloads     []workloadConfig `yaml:"workloads"`
+	MaxContainers int              `yaml:"max_containers"`
+	Seeds         []int64          `yaml:"seeds"`
+	Policies      []string         `yaml:"policies"`
+	Evaluators    []string         `yaml:"evaluators"`
+	Workers       int              `yaml:"workers"`
 }
 
 type workloadConfig struct {
@@ -120,7 +121,7 @@ func (config experimentConfig) validate() error {
 		if workload.Simulation.Iterations < 0 {
 			return fmt.Errorf("workload %q: simulation.iterations cannot be negative", workload.Name)
 		}
-		if _, err := backend.NewSimulationEngine(workload.Simulation.toBackendConfig(config.Seeds[0])); err != nil {
+		if _, err := backend.NewSimulationEngine(workload.Simulation.toBackendConfig(config.Seeds[0], config.MaxContainers)); err != nil {
 			return fmt.Errorf("workload %q: simulation: %w", workload.Name, err)
 		}
 	}
