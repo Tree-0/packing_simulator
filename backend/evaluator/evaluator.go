@@ -14,7 +14,8 @@ import (
 type EvaluationType int
 
 const (
-	ContainerUtilization EvaluationType = iota
+	BinCount EvaluationType = iota	   // Lower is better
+	ContainerUtilization
 	ContainerFragmentation
 	AreaWeightedContainerFragmentation // Lower is better
 	ContainerCompactness               // higher is better
@@ -23,6 +24,7 @@ const (
 
 func AllEvaluationTypes() []EvaluationType {
 	return []EvaluationType{
+		BinCount,
 		ContainerUtilization,
 		ContainerFragmentation,
 		AreaWeightedContainerFragmentation,
@@ -51,6 +53,8 @@ func (evalType EvaluationType) String() string {
 // Get the evaluator name from config and return the type
 func ParseEvaluation(name string) (EvaluationType, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "bin-count":
+		return BinCount, nil
 	case "utilization":
 		return ContainerUtilization, nil
 	case "fragmentation":
@@ -62,9 +66,15 @@ func ParseEvaluation(name string) (EvaluationType, error) {
 	case "future-fit-probability":
 		return FutureFitProbabilityMetric, nil
 	default:
+		evaluationTypes := AllEvaluationTypes()
+		names := make([]string, len(evaluationTypes))
+		for i, evaluationType := range evaluationTypes {
+			names[i] = evaluationType.String()
+		}
 		return 0, fmt.Errorf(
-			"unknown evaluator %q; choose one of: utilization, fragmentation, area-weighted-fragmentation, compactness, future-fit-probability",
+			"unknown evaluator %q; choose one of: %s",
 			name,
+			strings.Join(names, ", "),
 		)
 	}
 }
@@ -89,6 +99,8 @@ func EvaluateWorld(world *backend.World, evalType EvaluationType) float64 {
 	}
 
 	switch evalType {
+	case BinCount:
+		return float64(len(world.Containers))
 	case ContainerUtilization:
 		return Utilization(world)
 	case ContainerFragmentation:
