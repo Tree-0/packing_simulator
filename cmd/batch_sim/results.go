@@ -126,7 +126,7 @@ func (config experimentConfig) validate() error {
 	}
 
 	for _, name := range config.Policies {
-		if _, err := policy.NewPolicy(name); err != nil {
+		if _, err := policy.NewPlacementPolicy(name); err != nil {
 			return err
 		}
 	}

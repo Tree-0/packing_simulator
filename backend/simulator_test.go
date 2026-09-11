@@ -13,6 +13,7 @@ func TestRunWithProgressObserverReportsCumulativeResults(t *testing.T) {
 	var progress []backend.SimulationProgress
 
 	result, err := engine.RunWithProgressObserver(
+		policy.ContainerSelectorFirstFit{},
 		newBottomLeftPolicy(t),
 		2,
 		func(step backend.SimulationProgress, _ *backend.World) error {
@@ -42,7 +43,7 @@ func TestRunWithProgressObserverReportsEarlyStop(t *testing.T) {
 	engine := newProgressTestEngine(t, 1, 1)
 	var final backend.SimulationProgress
 
-	result, err := engine.RunWithProgressObserver(newBottomLeftPolicy(t), 3, func(step backend.SimulationProgress, _ *backend.World) error {
+	result, err := engine.RunWithProgressObserver(policy.ContainerSelectorFirstFit{}, newBottomLeftPolicy(t), 3, func(step backend.SimulationProgress, _ *backend.World) error {
 		final = step
 		return nil
 	})
@@ -62,7 +63,7 @@ func TestRunWithProgressObserverReportsEarlyStop(t *testing.T) {
 func TestRunWithProgressObserverZeroIterations(t *testing.T) {
 	engine := newProgressTestEngine(t, 2, 2)
 	called := false
-	result, err := engine.RunWithProgressObserver(newBottomLeftPolicy(t), 0, func(backend.SimulationProgress, *backend.World) error {
+	result, err := engine.RunWithProgressObserver(policy.ContainerSelectorFirstFit{}, newBottomLeftPolicy(t), 0, func(backend.SimulationProgress, *backend.World) error {
 		called = true
 		return nil
 	})
@@ -80,7 +81,7 @@ func TestRunWithProgressObserverZeroIterations(t *testing.T) {
 func TestRunWithProgressObserverWrapsErrors(t *testing.T) {
 	engine := newProgressTestEngine(t, 2, 2)
 	want := errors.New("stop recording")
-	_, err := engine.RunWithProgressObserver(newBottomLeftPolicy(t), 1, func(backend.SimulationProgress, *backend.World) error {
+	_, err := engine.RunWithProgressObserver(policy.ContainerSelectorFirstFit{}, newBottomLeftPolicy(t), 1, func(backend.SimulationProgress, *backend.World) error {
 		return want
 	})
 	if !errors.Is(err, want) {
@@ -106,9 +107,9 @@ func newProgressTestEngine(t *testing.T, height, width int) *backend.SimulationE
 	return engine
 }
 
-func newBottomLeftPolicy(t *testing.T) backend.Policy {
+func newBottomLeftPolicy(t *testing.T) backend.PlacementPolicy {
 	t.Helper()
-	p, err := policy.NewPolicy(policy.BottomLeftPolicyName)
+	p, err := policy.NewPlacementPolicy(policy.BottomLeftPolicyName)
 	if err != nil {
 		t.Fatal(err)
 	}

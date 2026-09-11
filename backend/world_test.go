@@ -5,7 +5,7 @@ import (
 )
 
 func TestCanPlace(t *testing.T) {
-	container, err := NewContainer(4, 5)
+	container, err := NewContainer(4, 5, 1) // id doesn't matter here
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestCanPlace(t *testing.T) {
 }
 
 func TestPlaceFillsCellsAndPreventsOverlap(t *testing.T) {
-	container, err := NewContainer(4, 5)
+	container, err := NewContainer(4, 5, 1) // id doesn't matter here
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestPlaceFillsCellsAndPreventsOverlap(t *testing.T) {
 }
 
 func TestCanFitDimensions(t *testing.T) {
-	container, err := NewContainer(3, 3)
+	container, err := NewContainer(3, 3, 1) // id doesn't matter here
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestZeroValueOccupancySnapshotCannotFitDimensions(t *testing.T) {
 }
 
 func TestSnapshotRemainsUnchangedAfterContainerPlacement(t *testing.T) {
-	container, err := NewContainer(2, 2)
+	container, err := NewContainer(2, 2, 1) // id doesn't matter here
 	if err != nil {
 		t.Fatal(err)
 	}

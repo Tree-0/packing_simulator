@@ -90,7 +90,7 @@ func TestRecordSimulationRejectsNegativeIterations(t *testing.T) {
 }
 
 func TestPlacedBoxesReturnsRectanglesInIDOrder(t *testing.T) {
-	container, err := backend.NewContainer(4, 5)
+	container, err := backend.NewContainer(4, 5, 1) // id doesn't matter here
 	if err != nil {
 		t.Fatal(err)
 	}

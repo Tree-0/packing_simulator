@@ -10,22 +10,13 @@ type FragmentationMetrics struct {
 }
 
 // Fragmentation measures the distinct four-directionally connected regions of
-// unused packing space.
-func Fragmentation(world *backend.World) FragmentationMetrics {
-	if world == nil {
-		return FragmentationMetrics{}
-	}
-
-	container := &world.Container
-	total := container.Height() * container.Width()
-	if total == 0 {
+// unused packing space in one container.
+func Fragmentation(container *backend.Container) FragmentationMetrics {
+	if containerArea(container) == 0 {
 		return FragmentationMetrics{}
 	}
 
 	visitedCells := make(map[backend.Point]struct{})
-
-	fragments := 0
-	emptyCells := 0
 	fragmentSizes := make([]int, 0)
 	directions := [...]backend.Point{
 		{X: 0, Y: 1},
@@ -34,7 +25,7 @@ func Fragmentation(world *backend.World) FragmentationMetrics {
 		{X: -1, Y: 0},
 	}
 
-	// bfs from each tile to find distinct packing gaps
+	emptyCells := 0
 	for y := 0; y < container.Height(); y++ {
 		for x := 0; x < container.Width(); x++ {
 			start := backend.Point{X: x, Y: y}
@@ -42,25 +33,19 @@ func Fragmentation(world *backend.World) FragmentationMetrics {
 				continue
 			}
 
-			// don't explore occupied cells
 			cell, err := container.Cell(x, y)
 			if err != nil || cell != backend.EmptyCell {
 				continue
 			}
 
-			// found the start of a new empty fragment
-			fragments++
-			currFragmentSize := 0
+			fragmentSize := 0
 			cellQueue := []backend.Point{start}
 			visitedCells[start] = struct{}{}
-
 			for queueIndex := 0; queueIndex < len(cellQueue); queueIndex++ {
 				cellPoint := cellQueue[queueIndex]
-				// new contiguous empty cell is part of this fragment
-				currFragmentSize++
+				fragmentSize++
 				emptyCells++
 
-				// explore in-range neighbors.
 				for _, direction := range directions {
 					next := backend.Point{X: cellPoint.X + direction.X, Y: cellPoint.Y + direction.Y}
 					if !InContainer(container, next) {
@@ -74,55 +59,93 @@ func Fragmentation(world *backend.World) FragmentationMetrics {
 					if err != nil || nextCell != backend.EmptyCell {
 						continue
 					}
-
 					visitedCells[next] = struct{}{}
 					cellQueue = append(cellQueue, next)
 				}
 			}
-
-			fragmentSizes = append(fragmentSizes, currFragmentSize)
+			fragmentSizes = append(fragmentSizes, fragmentSize)
 		}
 	}
 
-	squaredFragmentSum := float64(0)
+	squaredFragmentSum := 0.0
 	largestFragment := 0
 	for _, fragmentSize := range fragmentSizes {
-		squaredFragmentSum += float64(fragmentSize) * float64(fragmentSize)
+		squaredFragmentSum += float64(fragmentSize * fragmentSize)
 		if fragmentSize > largestFragment {
 			largestFragment = fragmentSize
 		}
 	}
 
-	fragmentation := 0.0
-	largestRegionRatio := 0.0
-	if emptyCells > 0 {
-		emptyCellCount := float64(emptyCells)
-		fragmentation = 1 - squaredFragmentSum/(emptyCellCount*emptyCellCount)
-		largestRegionRatio = float64(largestFragment) / emptyCellCount
+	if emptyCells == 0 {
+		return FragmentationMetrics{}
 	}
 
+	emptyCellCount := float64(emptyCells)
 	return FragmentationMetrics{
-		RegionCount:        fragments,
-		LargestRegionRatio: largestRegionRatio,
-		FragmentationScore: fragmentation,
+		RegionCount:        len(fragmentSizes),
+		LargestRegionRatio: float64(largestFragment) / emptyCellCount,
+		FragmentationScore: 1 - squaredFragmentSum/(emptyCellCount*emptyCellCount),
 		EmptyCells:         emptyCells,
 	}
 }
 
-func AreaWeightedFragmentation(world *backend.World) float64 {
-
-	fragmentation := Fragmentation(world)
-	totalCells := world.Container.Height() * world.Container.Width()
-	emptyFraction := float64(fragmentation.EmptyCells) / float64(totalCells)
-
-	// a very small number of empty cells will reduce the impact
-	// of those cells being highly fragmented
-	return (emptyFraction * fragmentation.FragmentationScore)
-
+// AreaWeightedFragmentation discounts fragmentation when little empty space
+// remains in one container.
+func AreaWeightedFragmentation(container *backend.Container) float64 {
+	return areaWeightedFragmentation(Fragmentation(container), containerArea(container))
 }
 
-// complement to AreaWeightedFragmentation.
-// Larger value indicates better score.
-func Compactness(world *backend.World) float64 {
-	return 1 - AreaWeightedFragmentation(world)
+func areaWeightedFragmentation(fragmentation FragmentationMetrics, totalCells int) float64 {
+	if totalCells == 0 {
+		return 0
+	}
+	return float64(fragmentation.EmptyCells) / float64(totalCells) * fragmentation.FragmentationScore
+}
+
+// Compactness is the complement of area-weighted fragmentation for one
+// container. A nil or zero-sized container has no compactness score.
+func Compactness(container *backend.Container) float64 {
+	if containerArea(container) == 0 {
+		return 0
+	}
+	return 1 - AreaWeightedFragmentation(container)
+}
+
+// MeanFragmentation is the unweighted mean fragmentation score across used
+// containers.
+func MeanFragmentation(world *backend.World) float64 {
+	containers := usedContainers(world)
+	if len(containers) == 0 {
+		return 0
+	}
+
+	total := 0.0
+	for _, container := range containers {
+		total += Fragmentation(container).FragmentationScore
+	}
+	return total / float64(len(containers))
+}
+
+// WorldAreaWeightedFragmentation weights each used container's fragmentation
+// by its empty cells relative to all used-container capacity.
+func WorldAreaWeightedFragmentation(world *backend.World) float64 {
+	weightedFragmentation := 0.0
+	totalCapacity := 0
+	for _, container := range usedContainers(world) {
+		fragmentation := Fragmentation(container)
+		weightedFragmentation += float64(fragmentation.EmptyCells) * fragmentation.FragmentationScore
+		totalCapacity += containerArea(container)
+	}
+	if totalCapacity == 0 {
+		return 0
+	}
+	return weightedFragmentation / float64(totalCapacity)
+}
+
+// WorldCompactness is the complement of world area-weighted fragmentation.
+func WorldCompactness(world *backend.World) float64 {
+	if UsedContainerCount(world) == 0 {
+		return 0
+	}
+	return 1 - WorldAreaWeightedFragmentation(world)
 }

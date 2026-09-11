@@ -14,11 +14,11 @@ import (
 type EvaluationType int
 
 const (
-	BinCount EvaluationType = iota	   // Lower is better
+	BinCount EvaluationType = iota // Lower is better.
 	ContainerUtilization
 	ContainerFragmentation
-	AreaWeightedContainerFragmentation // Lower is better
-	ContainerCompactness               // higher is better
+	AreaWeightedContainerFragmentation // Lower is better.
+	ContainerCompactness               // Higher is better.
 	FutureFitProbabilityMetric         // Requires a box-size distribution.
 )
 
@@ -35,6 +35,8 @@ func AllEvaluationTypes() []EvaluationType {
 
 func (evalType EvaluationType) String() string {
 	switch evalType {
+	case BinCount:
+		return "Used bin count"
 	case ContainerUtilization:
 		return "Container utilization"
 	case ContainerFragmentation:
@@ -50,7 +52,7 @@ func (evalType EvaluationType) String() string {
 	}
 }
 
-// Get the evaluator name from config and return the type
+// ParseEvaluation gets an evaluator type from its config name.
 func ParseEvaluation(name string) (EvaluationType, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "bin-count":
@@ -71,11 +73,7 @@ func ParseEvaluation(name string) (EvaluationType, error) {
 		for i, evaluationType := range evaluationTypes {
 			names[i] = evaluationType.String()
 		}
-		return 0, fmt.Errorf(
-			"unknown evaluator %q; choose one of: %s",
-			name,
-			strings.Join(names, ", "),
-		)
+		return 0, fmt.Errorf("unknown evaluator %q; choose one of: %s", name, strings.Join(names, ", "))
 	}
 }
 
@@ -84,38 +82,84 @@ func EvaluateSimulation(sim *backend.SimulationEngine, evalType EvaluationType) 
 	if sim == nil {
 		return 0
 	}
-	switch evalType {
-	case FutureFitProbabilityMetric:
-		return FutureFitProbability(
-			sim.World(),
-			sim.UniformBoxDistribution())
+	if evalType == FutureFitProbabilityMetric {
+		return WorldFutureFitProbability(sim.World(), sim.UniformBoxDistribution())
 	}
 	return EvaluateWorld(sim.World(), evalType)
 }
 
+// EvaluateWorld returns the requested scalar world-level metric.
 func EvaluateWorld(world *backend.World, evalType EvaluationType) float64 {
-	if world == nil {
-		return 0
-	}
-
 	switch evalType {
 	case BinCount:
-		return float64(len(world.Containers))
+		return float64(UsedContainerCount(world))
 	case ContainerUtilization:
-		return Utilization(world)
+		return WorldUtilization(world)
 	case ContainerFragmentation:
-		// ignores the other metrics returned by Fragmentation score for now...
-		return Fragmentation(world).FragmentationScore
+		return MeanFragmentation(world)
 	case AreaWeightedContainerFragmentation:
-		return AreaWeightedFragmentation(world)
+		return WorldAreaWeightedFragmentation(world)
 	case ContainerCompactness:
-		return Compactness(world)
+		return WorldCompactness(world)
 	default:
 		return 0
 	}
-
 }
 
-func InContainer(c *backend.Container, p backend.Point) bool {
-	return 0 <= p.X && p.X < c.Width() && 0 <= p.Y && p.Y < c.Height()
+// ContainerMetrics describes all geometric metrics for one used container.
+type ContainerMetrics struct {
+	ContainerID               int
+	Utilization               float64
+	Fragmentation             FragmentationMetrics
+	AreaWeightedFragmentation float64
+	Compactness               float64
+	FutureFitProbability      float64
+}
+
+// EvaluateContainerMetrics returns one evaluation record for each used
+// container, in the world's container order.
+func EvaluateContainerMetrics(
+	world *backend.World,
+	distribution backend.UniformBoxDistribution,
+) []ContainerMetrics {
+	containers := usedContainers(world)
+	metrics := make([]ContainerMetrics, 0, len(containers))
+	for _, container := range containers {
+		fragmentation := Fragmentation(container)
+		areaWeightedFragmentation := areaWeightedFragmentation(fragmentation, containerArea(container))
+		metrics = append(metrics, ContainerMetrics{
+			ContainerID:               container.Id(),
+			Utilization:               Utilization(container),
+			Fragmentation:             fragmentation,
+			AreaWeightedFragmentation: areaWeightedFragmentation,
+			Compactness:               1 - areaWeightedFragmentation,
+			FutureFitProbability:      FutureFitProbability(container, distribution),
+		})
+	}
+	return metrics
+}
+
+func usedContainers(world *backend.World) []*backend.Container {
+	if world == nil {
+		return nil
+	}
+
+	containers := make([]*backend.Container, 0, len(world.Containers))
+	for _, container := range world.Containers {
+		if container != nil && container.OccupiedArea() > 0 {
+			containers = append(containers, container)
+		}
+	}
+	return containers
+}
+
+func containerArea(container *backend.Container) int {
+	if container == nil {
+		return 0
+	}
+	return container.Height() * container.Width()
+}
+
+func InContainer(container *backend.Container, point backend.Point) bool {
+	return container != nil && 0 <= point.X && point.X < container.Width() && 0 <= point.Y && point.Y < container.Height()
 }

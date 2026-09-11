@@ -188,12 +188,13 @@ func runJob(
 		return RunResult{}, fmt.Errorf("policy %q, seed %d: create engine: %w", job.policyName, job.seed, err)
 	}
 
-	policy, err := policy.NewPolicy(job.policyName)
+	containerSelector := policy.ContainerSelectorFirstFit{}
+	policy, err := policy.NewPlacementPolicy(job.policyName)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("policy %q, seed %d: %w", job.policyName, job.seed, err)
 	}
 
-	simulation, err := engine.Run(policy, simulationConfig.Iterations)
+	simulation, err := engine.Run(containerSelector, policy, simulationConfig.Iterations)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("policy %q, seed %d: run simulation: %w", job.policyName, job.seed, err)
 	}

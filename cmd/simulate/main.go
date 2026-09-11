@@ -39,7 +39,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	policy, err := policy.NewPolicy(*values.PolicyName)
+	containerSelector := policy.ContainerSelectorFirstFit{}
+	policy, err := policy.NewPlacementPolicy(*values.PolicyName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,6 +49,7 @@ func main() {
 		firstFrame := true
 		fmt.Print("\033[?25l") // Hide the cursor while animating.
 		result, err = engine.RunWithObserver(
+			containerSelector,
 			policy,
 			*values.Iterations,
 			func(timestamp int, world *backend.World) error {
@@ -73,7 +75,7 @@ func main() {
 		}
 		fmt.Println()
 	} else {
-		result, err = engine.Run(policy, *values.Iterations)
+		result, err = engine.Run(containerSelector, policy, *values.Iterations)
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -105,11 +107,34 @@ func main() {
 		}
 	}
 	fmt.Println()
+	printContainerMetrics(evaluator.EvaluateContainerMetrics(engine.World(), engine.UniformBoxDistribution()))
+	fmt.Println()
 
 	if *animate < 0 {
 		if err := printContainers(engine.World().Containers); err != nil {
 			log.Fatal(err)
 		}
+	}
+}
+
+func printContainerMetrics(metrics []evaluator.ContainerMetrics) {
+	if len(metrics) == 0 {
+		fmt.Println("Per-container evaluations: no used containers")
+		return
+	}
+
+	fmt.Println("Per-container evaluations:")
+	fmt.Printf("  %-10s %12s %16s %18s %14s %14s\n", "Container", "Utilization", "Fragmentation", "Area-weighted", "Compactness", "Future fit")
+	for _, metric := range metrics {
+		fmt.Printf(
+			"  %-10d %11.1f%% %16.4f %18.4f %14.4f %13.1f%%\n",
+			metric.ContainerID,
+			100*metric.Utilization,
+			metric.Fragmentation.FragmentationScore,
+			metric.AreaWeightedFragmentation,
+			metric.Compactness,
+			100*metric.FutureFitProbability,
+		)
 	}
 }
 
@@ -134,12 +159,12 @@ func printContainer(container *backend.Container) error {
 }
 
 func printContainers(containers []*backend.Container) error {
-    for _, container := range containers {
-        fmt.Printf("Container %d:\n", container.Id()) // or index if no ID accessor
-        if err := printContainer(container); err != nil {
-            return err
-        }
-        fmt.Println()
-    }
-    return nil
+	for _, container := range containers {
+		fmt.Printf("Container %d:\n", container.Id()) // or index if no ID accessor
+		if err := printContainer(container); err != nil {
+			return err
+		}
+		fmt.Println()
+	}
+	return nil
 }

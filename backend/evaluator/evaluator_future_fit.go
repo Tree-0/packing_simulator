@@ -2,34 +2,63 @@ package evaluator
 
 import "packing_simulator/backend"
 
-// The probability that a box from the provided size distribution could fit somewhere
-// in the current world's container.
-// TODO: account for rotation
-func FutureFitProbability(world *backend.World, d backend.UniformBoxDistribution) float64 {
-	if world == nil || d.MinWidth <= 0 || d.MinHeight <= 0 || d.MaxWidth < d.MinWidth || d.MaxHeight < d.MinHeight {
+// FutureFitProbability is the probability that a box from the provided size
+// distribution could fit in one container. Rotation is not considered.
+func FutureFitProbability(container *backend.Container, distribution backend.UniformBoxDistribution) float64 {
+	if container == nil || !validDistribution(distribution) {
 		return 0
 	}
 
 	fitCount := 0
-	totalPossibleSizes := (d.MaxHeight - d.MinHeight + 1) * (d.MaxWidth - d.MinWidth + 1)
-
-	// build a public wrapper of a reusable 2D prefix sum index for rectangular fit queries
-	fitIndex := world.Container.OccupancySnapshot()
-
-	for height := d.MinHeight; height <= d.MaxHeight; height++ {
-		for width := d.MinWidth; width <= d.MaxWidth; width++ {
+	totalPossibleSizes := distributionSizeCount(distribution)
+	fitIndex := container.OccupancySnapshot()
+	for height := distribution.MinHeight; height <= distribution.MaxHeight; height++ {
+		for width := distribution.MinWidth; width <= distribution.MaxWidth; width++ {
 			if fitIndex.CanFitDimensions(width, height) {
-				fitCount += 1
+				fitCount++
 			}
 		}
-	}
-
-	if totalPossibleSizes == 0 {
-		return 0
 	}
 
 	return float64(fitCount) / float64(totalPossibleSizes)
 }
 
-// TODO: Current future fit only examines the probability of ANY future box fitting.
-// It does not consider HOW MANY could fit, and currently does not account for rotation
+// WorldFutureFitProbability is the probability that a generated box can fit
+// in at least one used container. Rotation is not considered.
+func WorldFutureFitProbability(world *backend.World, distribution backend.UniformBoxDistribution) float64 {
+	containers := usedContainers(world)
+	if len(containers) == 0 || !validDistribution(distribution) {
+		return 0
+	}
+
+	fitIndices := make([]backend.OccupancySnapshot, len(containers))
+	for i, container := range containers {
+		fitIndices[i] = container.OccupancySnapshot()
+	}
+
+	fitCount := 0
+	totalPossibleSizes := distributionSizeCount(distribution)
+	for height := distribution.MinHeight; height <= distribution.MaxHeight; height++ {
+		for width := distribution.MinWidth; width <= distribution.MaxWidth; width++ {
+			for _, fitIndex := range fitIndices {
+				if fitIndex.CanFitDimensions(width, height) {
+					fitCount++
+					break
+				}
+			}
+		}
+	}
+
+	return float64(fitCount) / float64(totalPossibleSizes)
+}
+
+func validDistribution(distribution backend.UniformBoxDistribution) bool {
+	return distribution.MinWidth > 0 && distribution.MinHeight > 0 &&
+		distribution.MaxWidth >= distribution.MinWidth &&
+		distribution.MaxHeight >= distribution.MinHeight
+}
+
+func distributionSizeCount(distribution backend.UniformBoxDistribution) int {
+	return (distribution.MaxHeight - distribution.MinHeight + 1) *
+		(distribution.MaxWidth - distribution.MinWidth + 1)
+}

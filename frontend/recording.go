@@ -75,10 +75,12 @@ func RecordSimulation(spec SimulationSpec) (SimulationRecording, error) {
 		return SimulationRecording{}, fmt.Errorf("create simulation engine: %w", err)
 	}
 
-	policy, err := policy.NewPolicy(spec.PolicyName)
+	placementPolicy, err := policy.NewPlacementPolicy(spec.PolicyName)
 	if err != nil {
 		return SimulationRecording{}, err
 	}
+	containerSelector := policy.ContainerSelectorFirstFit{}
+	initialContainer := engine.World().Containers[0]
 
 	id := spec.ID
 	if id == "" {
@@ -87,10 +89,10 @@ func RecordSimulation(spec SimulationSpec) (SimulationRecording, error) {
 
 	recording := SimulationRecording{
 		ID:           id,
-		Policy:       policy.Name(),
+		Policy:       placementPolicy.Name(),
 		Seed:         spec.Config.Seed,
-		Width:        engine.World().Container.Width(),
-		Height:       engine.World().Container.Height(),
+		Width:        initialContainer.Width(),
+		Height:       initialContainer.Height(),
 		QueueLimit:   engine.World().Queue.Limit,
 		FrameDelayMS: DefaultFrameDelayMS,
 		Frames:       make([]SimulationFrame, 0, spec.Iterations+1),
@@ -98,7 +100,8 @@ func RecordSimulation(spec SimulationSpec) (SimulationRecording, error) {
 
 	recording.Frames = append(recording.Frames, captureFrame(engine, nil, backend.SimulationResult{}))
 	_, err = engine.RunWithProgressObserver(
-		policy,
+		containerSelector,
+		placementPolicy,
 		spec.Iterations,
 		func(progress backend.SimulationProgress, _ *backend.World) error {
 			timestamp := progress.Timestamp
@@ -119,7 +122,7 @@ func captureFrame(engine *backend.SimulationEngine, timestamp *int, result backe
 		Timestamp:   timestamp,
 		QueueCount:  len(world.Queue.Items),
 		Stats:       statsFromResult(result),
-		Boxes:       placedBoxes(&world.Container),
+		Boxes:       placedBoxes(world.Containers[0]),
 		Evaluations: evaluationValues(engine),
 	}
 }

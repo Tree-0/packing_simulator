@@ -19,7 +19,7 @@ func AvailablePolicyNames() []string {
 	}
 }
 
-func NewPolicy(name string) (backend.Policy, error) {
+func NewPlacementPolicy(name string) (backend.PlacementPolicy, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case BottomLeftPolicyName:
 		return BottomLeftPolicy{}, nil
