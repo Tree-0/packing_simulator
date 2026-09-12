@@ -1,8 +1,10 @@
 import type { EvaluationValue, SimulationFrame, SimulationRecording } from '../types'
+import { usedBinCount } from './ContainerGallery'
 
 interface SimulationDashboardProps {
   recording: SimulationRecording
   frame: SimulationFrame
+  frameIndex: number
 }
 
 function formatEvaluation(evaluation: EvaluationValue): string {
@@ -12,7 +14,7 @@ function formatEvaluation(evaluation: EvaluationValue): string {
   return evaluation.value.toFixed(4)
 }
 
-export function SimulationDashboard({ recording, frame }: SimulationDashboardProps) {
+export function SimulationDashboard({ recording, frame, frameIndex }: SimulationDashboardProps) {
   const timestamp = frame.timestamp === null ? 'Initial' : frame.timestamp
   const stats = frame.stats
   const primaryStats = [
@@ -24,14 +26,25 @@ export function SimulationDashboard({ recording, frame }: SimulationDashboardPro
     ['Rotated', stats.rotated],
     ['Rejected', stats.rejected],
     ['Batches', stats.batches],
+    ['Used bins', usedBinCount(recording, frameIndex)],
   ]
 
   return (
     <aside className="simulation-dashboard" aria-label="Simulation dashboard">
       <div className="run-meta">
+        {recording.workload && (
+          <div>
+            <span className="meta-label">Workload</span>
+            <strong>{recording.workload}</strong>
+          </div>
+        )}
         <div>
-          <span className="meta-label">Policy</span>
+          <span className="meta-label">Placement policy</span>
           <strong>{recording.policy}</strong>
+        </div>
+        <div>
+          <span className="meta-label">Container selector</span>
+          <strong>{recording.containerSelector}</strong>
         </div>
         <div>
           <span className="meta-label">Seed</span>

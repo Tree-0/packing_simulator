@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { PlacedBox } from '../types'
+import type { RecordedBox } from '../types'
 
 interface PackingCanvasProps {
   width: number
   height: number
-  boxes: PlacedBox[]
+  boxes: RecordedBox[]
+  density?: 'detail' | 'compact'
 }
 
 const MIN_CELL_SIZE = 2
@@ -12,6 +13,7 @@ const MAX_SCROLLABLE_DIMENSION = 8192
 const MAX_FITTED_HEIGHT = 704
 const MIN_FITTED_HEIGHT = 240
 const CONTROLS_HEIGHT_RESERVE = 150
+const OFFSCREEN_MARGIN = 160
 
 export interface CanvasSize {
   width: number
@@ -26,6 +28,7 @@ export function calculateCanvasSize(
   gridHeight: number,
   availableWidth: number,
   availableHeight: number,
+  minimumCellSize = MIN_CELL_SIZE,
 ): CanvasSize {
   if (gridWidth <= 0 || gridHeight <= 0 || availableWidth <= 0 || availableHeight <= 0) {
     return { width: 0, height: 0, viewportHeight: 0, overflowX: false, overflowY: false }
@@ -33,7 +36,7 @@ export function calculateCanvasSize(
 
   const fittedCellSize = Math.min(availableWidth / gridWidth, availableHeight / gridHeight)
   const largestGridDimension = Math.max(gridWidth, gridHeight)
-  const minimumReadableCellSize = Math.min(MIN_CELL_SIZE, MAX_SCROLLABLE_DIMENSION / largestGridDimension)
+  const minimumReadableCellSize = Math.min(minimumCellSize, MAX_SCROLLABLE_DIMENSION / largestGridDimension)
   const cellSize = Math.max(fittedCellSize, minimumReadableCellSize)
   const width = gridWidth * cellSize
   const height = gridHeight * cellSize
@@ -47,6 +50,15 @@ export function calculateCanvasSize(
   }
 }
 
+export function calculateCompactCanvasSize(
+  gridWidth: number,
+  gridHeight: number,
+  availableWidth: number,
+  availableHeight: number,
+): CanvasSize {
+  return calculateCanvasSize(gridWidth, gridHeight, availableWidth, availableHeight, 0)
+}
+
 export function colorForBox(id: number): string {
   const hue = Math.round((id * 137.508) % 360)
   return `hsl(${hue} 62% 61%)`
@@ -56,7 +68,7 @@ export function drawPacking(
   context: CanvasRenderingContext2D,
   gridWidth: number,
   gridHeight: number,
-  boxes: PlacedBox[],
+  boxes: RecordedBox[],
   canvasWidth: number,
   canvasHeight: number,
 ): void {
@@ -107,10 +119,38 @@ export function drawPacking(
   })
 }
 
-export function PackingCanvas({ width, height, boxes }: PackingCanvasProps) {
+export function PackingCanvas({ width, height, boxes, density = 'detail' }: PackingCanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [canvasSize, setCanvasSize] = useState(() => calculateCanvasSize(width, height, 640, 480))
+  const [isVisible, setIsVisible] = useState(() => typeof IntersectionObserver === 'undefined')
+  const [canvasSize, setCanvasSize] = useState(() =>
+    density === 'compact'
+      ? calculateCompactCanvasSize(width, height, 240, 160)
+      : calculateCanvasSize(width, height, 640, 480),
+  )
+
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return undefined
+
+    // Draw canvases already near the viewport immediately. IntersectionObserver
+    // then keeps later grid cards deferred until the user scrolls toward them.
+    const bounds = viewport.getBoundingClientRect()
+    setIsVisible(
+      bounds.bottom >= -OFFSCREEN_MARGIN &&
+      bounds.top <= window.innerHeight + OFFSCREEN_MARGIN,
+    )
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true)
+      return undefined
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry?.isIntersecting ?? false),
+      { rootMargin: `${OFFSCREEN_MARGIN}px` },
+    )
+    observer.observe(viewport)
+    return () => observer.disconnect()
+  }, [])
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current
@@ -122,11 +162,12 @@ export function PackingCanvas({ width, height, boxes }: PackingCanvasProps) {
       if (availableWidth <= 0) return
 
       const remainingViewportHeight = window.innerHeight - Math.max(0, bounds.top) - CONTROLS_HEIGHT_RESERVE
-      const availableHeight = Math.min(
-        MAX_FITTED_HEIGHT,
-        Math.max(MIN_FITTED_HEIGHT, remainingViewportHeight),
-      )
-      const nextSize = calculateCanvasSize(width, height, availableWidth, availableHeight)
+      const availableHeight = density === 'compact'
+        ? Math.max(72, Math.min(180, availableWidth))
+        : Math.min(MAX_FITTED_HEIGHT, Math.max(MIN_FITTED_HEIGHT, remainingViewportHeight))
+      const nextSize = density === 'compact'
+        ? calculateCompactCanvasSize(width, height, availableWidth, availableHeight)
+        : calculateCanvasSize(width, height, availableWidth, availableHeight)
       setCanvasSize((current) => {
         if (
           current.width === nextSize.width &&
@@ -152,11 +193,11 @@ export function PackingCanvas({ width, height, boxes }: PackingCanvasProps) {
       observer.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [height, width])
+  }, [density, height, width])
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return undefined
+    if (!canvas || !isVisible) return undefined
 
     const redraw = () => {
       const bounds = canvas.getBoundingClientRect()
@@ -176,14 +217,14 @@ export function PackingCanvas({ width, height, boxes }: PackingCanvasProps) {
     const observer = new ResizeObserver(redraw)
     observer.observe(canvas)
     return () => observer.disconnect()
-  }, [boxes, canvasSize, height, width])
+  }, [boxes, canvasSize, height, isVisible, width])
 
   const scrollable = canvasSize.overflowX || canvasSize.overflowY
 
   return (
     <div
       ref={viewportRef}
-      className="packing-canvas-viewport"
+      className={`packing-canvas-viewport is-${density}`}
       style={{ height: canvasSize.viewportHeight }}
       tabIndex={scrollable ? 0 : undefined}
       aria-label={scrollable ? 'Scrollable packing grid' : undefined}

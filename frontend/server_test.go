@@ -9,7 +9,17 @@ import (
 )
 
 func TestHandlerServesSimulationAPI(t *testing.T) {
-	recording := SimulationRecording{ID: "one", Frames: []SimulationFrame{}}
+	recording := SimulationRecording{
+		ID: "one",
+		Containers: []ContainerRecording{{
+			ID:           2,
+			Width:        4,
+			Height:       3,
+			CreatedFrame: 1,
+			Boxes:        []RecordedBox{{FrameIndex: 2, ID: 7, Width: 2, Height: 1}},
+		}},
+		Frames: []SimulationFrame{{}},
+	}
 	request := httptest.NewRequest(http.MethodGet, "/api/simulations", nil)
 	response := httptest.NewRecorder()
 
@@ -27,6 +37,10 @@ func TestHandlerServesSimulationAPI(t *testing.T) {
 	}
 	if len(body.Simulations) != 1 || body.Simulations[0].ID != "one" {
 		t.Errorf("response = %+v", body)
+	}
+	got := body.Simulations[0].Containers
+	if len(got) != 1 || got[0].ID != 2 || got[0].CreatedFrame != 1 || len(got[0].Boxes) != 1 || got[0].Boxes[0].FrameIndex != 2 {
+		t.Errorf("recorded containers = %+v", got)
 	}
 }
 

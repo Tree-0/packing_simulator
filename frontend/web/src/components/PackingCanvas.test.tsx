@@ -1,4 +1,9 @@
-import { calculateCanvasSize, colorForBox, drawPacking } from './PackingCanvas'
+import {
+  calculateCanvasSize,
+  calculateCompactCanvasSize,
+  colorForBox,
+  drawPacking,
+} from './PackingCanvas'
 
 function drawingContext() {
   return {
@@ -31,7 +36,7 @@ describe('PackingCanvas drawing helpers', () => {
       context as unknown as CanvasRenderingContext2D,
       4,
       2,
-      [{ id: 7, x: 1, y: 0, width: 2, height: 1 }],
+      [{ frameIndex: 1, id: 7, x: 1, y: 0, width: 2, height: 1 }],
       400,
       200,
     )
@@ -78,6 +83,23 @@ describe('PackingCanvas drawing helpers', () => {
       height: 20,
       viewportHeight: 20,
       overflowX: true,
+      overflowY: false,
+    })
+  })
+
+  it('fits compact canvases entirely inside their thumbnail bounds', () => {
+    expect(calculateCompactCanvasSize(1000, 10, 200, 100)).toEqual({
+      width: 200,
+      height: 2,
+      viewportHeight: 2,
+      overflowX: false,
+      overflowY: false,
+    })
+    expect(calculateCompactCanvasSize(10, 1000, 200, 100)).toEqual({
+      width: 1,
+      height: 100,
+      viewportHeight: 100,
+      overflowX: false,
       overflowY: false,
     })
   })

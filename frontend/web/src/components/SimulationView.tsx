@@ -1,17 +1,17 @@
-import { usePlayback } from '../hooks/usePlayback'
 import type { SimulationRecording } from '../types'
-import { PackingCanvas } from './PackingCanvas'
-import { PlaybackControls } from './PlaybackControls'
+import { ContainerGallery } from './ContainerGallery'
 import { SimulationDashboard } from './SimulationDashboard'
 
 interface SimulationViewProps {
   recording: SimulationRecording
   position: number
+  frameIndex: number
+  isPlaying: boolean
 }
 
-export function SimulationView({ recording, position }: SimulationViewProps) {
-  const playback = usePlayback(recording.frames.length, recording.frameDelayMs)
-  const frame = recording.frames[playback.frameIndex]
+export function SimulationView({ recording, position, frameIndex, isPlaying }: SimulationViewProps) {
+  const recordingFrameIndex = Math.min(frameIndex, Math.max(0, recording.frames.length - 1))
+  const frame = recording.frames[recordingFrameIndex]
 
   if (!frame) {
     return (
@@ -21,6 +21,12 @@ export function SimulationView({ recording, position }: SimulationViewProps) {
     )
   }
 
+  const playbackLabel = recordingFrameIndex === recording.frames.length - 1
+    ? 'Complete'
+    : isPlaying
+      ? 'Playing'
+      : 'Paused'
+
   return (
     <section className="simulation-card" aria-label={`Simulation ${recording.id}`}>
       <header className="simulation-heading">
@@ -28,18 +34,17 @@ export function SimulationView({ recording, position }: SimulationViewProps) {
           <p className="eyebrow">Simulation {String(position + 1).padStart(2, '0')}</p>
           <h2>Packing run</h2>
         </div>
-        <span className={`playback-status ${playback.isPlaying ? 'is-playing' : ''}`}>
+        <span className={`playback-status ${playbackLabel === 'Playing' ? 'is-playing' : ''}`}>
           <span aria-hidden="true" />
-          {playback.isPlaying ? 'Playing' : playback.frameIndex === recording.frames.length - 1 ? 'Complete' : 'Paused'}
+          {playbackLabel}
         </span>
       </header>
 
       <div className="simulation-layout">
         <div className="visualization-panel">
-          <PackingCanvas width={recording.width} height={recording.height} boxes={frame.boxes} />
-          <PlaybackControls playback={playback} frameCount={recording.frames.length} />
+          <ContainerGallery recording={recording} frameIndex={recordingFrameIndex} />
         </div>
-        <SimulationDashboard recording={recording} frame={frame} />
+        <SimulationDashboard recording={recording} frame={frame} frameIndex={recordingFrameIndex} />
       </div>
     </section>
   )

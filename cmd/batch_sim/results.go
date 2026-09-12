@@ -7,50 +7,18 @@ seeds.
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"os"
 	"sort"
 
 	"packing_simulator/backend"
 	"packing_simulator/backend/evaluator"
-	"packing_simulator/backend/policy"
-
-	"gopkg.in/yaml.v3"
+	"packing_simulator/internal/simconfig"
 )
 
-// configs to determine how the experiment will be run
-type experimentConfig struct {
-	Workloads          []workloadConfig          `yaml:"workloads"`
-	MaxContainers      int                       `yaml:"max_containers"`
-	Seeds              []int64                   `yaml:"seeds"`
-	Policies           []string                  `yaml:"policies"`
-	ContainerSelectors []containerSelectorConfig `yaml:"container_selectors"`
-	Evaluators         []string                  `yaml:"evaluators"`
-	Workers            int                       `yaml:"workers"`
-}
-
-// containerSelectorConfig is the experiment equivalent of the shared
-// single-run container_selector YAML object. K is used only by Next K Fit.
-type containerSelectorConfig struct {
-	Name string `yaml:"name"`
-	K    int    `yaml:"k"`
-}
-
-// effectiveContainerSelectors returns the configured selectors, or the
-// historical First Fit default when older experiment configuration omits them.
-func (config experimentConfig) effectiveContainerSelectors() []containerSelectorConfig {
-	if len(config.ContainerSelectors) == 0 {
-		return []containerSelectorConfig{{Name: policy.ContainerSelectorFirstFitName}}
-	}
-	return config.ContainerSelectors
-}
-
-type workloadConfig struct {
-	Name       string           `yaml:"name"`
-	Simulation simulationConfig `yaml:"simulation"`
-}
+type experimentConfig = simconfig.ExperimentFile
+type workloadConfig = simconfig.ExperimentWorkload
+type simulationConfig = simconfig.WorkloadSimulation
+type containerSelectorConfig = simconfig.ContainerSelectorConfig
 
 type RunResult struct {
 	WorkloadName          string
@@ -79,90 +47,8 @@ type AggregateResult struct {
 	Evaluation            evaluationResult
 }
 
-// loadExperimentConfig reads and validates one experiment configuration file.
-// A relative path is interpreted relative to the process's current directory.
 func loadExperimentConfig(path string) (experimentConfig, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return experimentConfig{}, fmt.Errorf("open experiment config %q: %w", path, err)
-	}
-	defer file.Close()
-
-	decoder := yaml.NewDecoder(file)
-	decoder.KnownFields(true)
-
-	var config experimentConfig
-	if err := decoder.Decode(&config); err != nil {
-		return experimentConfig{}, fmt.Errorf("decode experiment config %q: %w", path, err)
-	}
-
-	var extraDocument any
-	if err := decoder.Decode(&extraDocument); err != io.EOF {
-		if err == nil {
-			return experimentConfig{}, fmt.Errorf("decode experiment config %q: multiple YAML documents are not supported", path)
-		}
-		return experimentConfig{}, fmt.Errorf("decode experiment config %q: %w", path, err)
-	}
-
-	if err := config.validate(); err != nil {
-		return experimentConfig{}, fmt.Errorf("invalid experiment config %q: %w", path, err)
-	}
-
-	return config, nil
-}
-
-func (config experimentConfig) validate() error {
-	if len(config.Workloads) == 0 {
-		return errors.New("at least one workload is required")
-	}
-	if len(config.Seeds) == 0 {
-		return errors.New("at least one seed is required")
-	}
-	if len(config.Policies) == 0 {
-		return errors.New("at least one policy is required")
-	}
-	if len(config.Evaluators) == 0 {
-		return errors.New("at least one evaluator is required")
-	}
-	if config.Workers < 0 {
-		return errors.New("workers cannot be negative")
-	}
-
-	workloadNames := make(map[string]struct{}, len(config.Workloads))
-	for _, workload := range config.Workloads {
-		if workload.Name == "" {
-			return errors.New("workload name is required")
-		}
-		if _, exists := workloadNames[workload.Name]; exists {
-			return fmt.Errorf("duplicate workload name %q", workload.Name)
-		}
-		workloadNames[workload.Name] = struct{}{}
-
-		if workload.Simulation.Iterations < 0 {
-			return fmt.Errorf("workload %q: simulation.iterations cannot be negative", workload.Name)
-		}
-		if _, err := backend.NewSimulationEngine(workload.Simulation.toBackendConfig(config.Seeds[0], config.MaxContainers)); err != nil {
-			return fmt.Errorf("workload %q: simulation: %w", workload.Name, err)
-		}
-	}
-
-	for _, name := range config.Policies {
-		if _, err := policy.NewPlacementPolicy(name); err != nil {
-			return err
-		}
-	}
-	for _, selector := range config.effectiveContainerSelectors() {
-		if _, err := policy.NewContainerSelector(selector.Name, selector.K); err != nil {
-			return err
-		}
-	}
-	for _, name := range config.Evaluators {
-		if _, err := evaluator.ParseEvaluation(name); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return simconfig.LoadExperiment(path)
 }
 
 // Run multiple defined workloads as part of one experiment, and return the results
@@ -170,19 +56,11 @@ func (config experimentConfig) validate() error {
 // Container Selectors * Seeds) distinct runs, all of which receive every
 // evaluation type defined in the config.
 func runExperiment(config experimentConfig) ([]RunResult, error) {
-
-	totalSimulations := len(config.Workloads) * len(config.Policies) * len(config.effectiveContainerSelectors()) * len(config.Seeds)
-	runResults := make([]RunResult, 0, totalSimulations)
-
-	for _, workload := range config.Workloads {
-		workloadResults, err := runWorkload(workload, config)
-		if err != nil {
-			return nil, fmt.Errorf("run workload %q: %w", workload.Name, err)
-		}
-		runResults = append(runResults, workloadResults...)
+	specs, err := config.RunSpecs()
+	if err != nil {
+		return nil, err
 	}
-
-	return runResults, nil
+	return runSpecs(specs, config.Workers)
 }
 
 // Take in all RunResults and produce the aggregated results by (workload,

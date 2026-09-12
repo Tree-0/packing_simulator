@@ -17,26 +17,8 @@ import (
 	"packing_simulator/backend"
 	"packing_simulator/backend/evaluator"
 	"packing_simulator/backend/policy"
+	"packing_simulator/internal/simconfig"
 )
-
-type simulationConfig struct {
-	ContainerHeight  int  `yaml:"container_height"`
-	ContainerWidth   int  `yaml:"container_width"`
-	QueueSize        int  `yaml:"queue_size"`
-	MinBoxHeight     int  `yaml:"min_box_height"`
-	MaxBoxHeight     int  `yaml:"max_box_height"`
-	MinBoxWidth      int  `yaml:"min_box_width"`
-	MaxBoxWidth      int  `yaml:"max_box_width"`
-	Iterations       int  `yaml:"iterations"`
-	AllowBoxRotation bool `yaml:"allow_box_rotation"`
-}
-
-type workloadJob struct {
-	index             int
-	policyName        string
-	containerSelector containerSelectorConfig
-	seed              int64
-}
 
 type evaluationResult struct {
 	evaluation evaluator.EvaluationType
@@ -50,7 +32,7 @@ type jobOutcome struct {
 }
 
 func main() {
-	configPath := flag.String("config", "config/experiment/config.yml", "path to the experiment YAML config")
+	configPath := flag.String("config", simconfig.DefaultExperimentPath, "path to the experiment YAML config")
 	outputDir := flag.String("output-dir", "", "directory in which to write CSV results; omit to disable CSV output")
 	flag.Parse()
 	if flag.NArg() != 0 {
@@ -85,60 +67,21 @@ func main() {
 	}
 }
 
-func (config simulationConfig) toBackendConfig(seed int64, maxContainers int) backend.SimulationConfig {
-	return backend.SimulationConfig{
-		ContainerHeight:  config.ContainerHeight,
-		ContainerWidth:   config.ContainerWidth,
-		MaxContainers:    maxContainers,
-		QueueSize:        config.QueueSize,
-		MinBoxHeight:     config.MinBoxHeight,
-		MaxBoxHeight:     config.MaxBoxHeight,
-		MinBoxWidth:      config.MinBoxWidth,
-		MaxBoxWidth:      config.MaxBoxWidth,
-		Seed:             seed,
-		AllowBoxRotation: config.AllowBoxRotation,
+func runSpecs(specs []simconfig.ExperimentRunSpec, workers int) ([]RunResult, error) {
+	if len(specs) == 0 {
+		return []RunResult{}, nil
 	}
-}
-
-func runWorkload(workload workloadConfig, config experimentConfig) ([]RunResult, error) {
-	evaluations := make([]evaluator.EvaluationType, len(config.Evaluators))
-	for i, name := range config.Evaluators {
-		evaluation, err := evaluator.ParseEvaluation(name)
-		if err != nil {
-			return nil, err
-		}
-		evaluations[i] = evaluation
-	}
-
-	// Create jobs for every placement-policy, container-selector, and seed
-	// combination for this workload.
-	selectors := config.effectiveContainerSelectors()
-	jobs := make([]workloadJob, 0, len(config.Policies)*len(selectors)*len(config.Seeds))
-	for _, policyName := range config.Policies {
-		for _, containerSelector := range selectors {
-			for _, seed := range config.Seeds {
-				jobs = append(jobs, workloadJob{
-					index:             len(jobs),
-					policyName:        policyName,
-					containerSelector: containerSelector,
-					seed:              seed,
-				})
-			}
-		}
-	}
-
-	workers := config.Workers
 	if workers == 0 {
 		workers = runtime.GOMAXPROCS(0)
 	}
-	if workers > len(jobs) {
-		workers = len(jobs)
+	if workers > len(specs) {
+		workers = len(specs)
 	}
 
-	// unbuffered; producer waits until worker is available to send a job
-	jobQueue := make(chan workloadJob)
+	// Unbuffered: the producer waits until a worker is ready for another spec.
+	jobQueue := make(chan simconfig.ExperimentRunSpec)
 	// buffered; can receive outcomes without waiting for a collector to consume the results
-	outcomes := make(chan jobOutcome, len(jobs))
+	outcomes := make(chan jobOutcome, len(specs))
 
 	// 1. consumers
 	// only run `worker` parallel jobs at a time
@@ -148,9 +91,9 @@ func runWorkload(workload workloadConfig, config experimentConfig) ([]RunResult,
 		// each worker repeatedly receives jobs
 		go func() {
 			defer workersDone.Done()
-			for job := range jobQueue { // waits for work
-				result, err := runJob(workload.Name, workload.Simulation, config.MaxContainers, evaluations, job)
-				outcomes <- jobOutcome{index: job.index, result: result, err: err}
+			for spec := range jobQueue { // waits for work
+				result, err := runJob(spec)
+				outcomes <- jobOutcome{index: spec.Index, result: result, err: err}
 			}
 		}()
 	}
@@ -159,8 +102,8 @@ func runWorkload(workload workloadConfig, config experimentConfig) ([]RunResult,
 	// insert all the jobs into the queue--this is what is feeding work
 	// into the previous goroutine.
 	go func() {
-		for _, job := range jobs {
-			jobQueue <- job
+		for _, spec := range specs {
+			jobQueue <- spec
 		}
 		close(jobQueue)
 		workersDone.Wait()
@@ -168,7 +111,7 @@ func runWorkload(workload workloadConfig, config experimentConfig) ([]RunResult,
 	}()
 
 	// 3. collect results from the outcome channel's buffer
-	results := make([]RunResult, len(jobs))
+	results := make([]RunResult, len(specs))
 	var jobErrors []error
 	for outcome := range outcomes {
 		if outcome.err != nil {
@@ -184,41 +127,36 @@ func runWorkload(workload workloadConfig, config experimentConfig) ([]RunResult,
 	return results, nil
 }
 
-func runJob(
-	workloadName string,
-	simulationConfig simulationConfig,
-	maxContainers int,
-	evaluations []evaluator.EvaluationType,
-	job workloadJob,
-) (RunResult, error) {
-	engine, err := backend.NewSimulationEngine(simulationConfig.toBackendConfig(job.seed, maxContainers))
+func runJob(spec simconfig.ExperimentRunSpec) (RunResult, error) {
+	selectorName := spec.ContainerSelector.Name
+	engine, err := backend.NewSimulationEngine(spec.Config)
 	if err != nil {
-		return RunResult{}, fmt.Errorf("placement policy %q, container selector %q, seed %d: create engine: %w", job.policyName, job.containerSelector.Name, job.seed, err)
+		return RunResult{}, fmt.Errorf("workload %q, placement policy %q, container selector %q, seed %d: create engine: %w", spec.WorkloadName, spec.PolicyName, selectorName, spec.Config.Seed, err)
 	}
 
-	placementPolicy, err := policy.NewPlacementPolicy(job.policyName)
+	placementPolicy, err := policy.NewPlacementPolicy(spec.PolicyName)
 	if err != nil {
-		return RunResult{}, fmt.Errorf("placement policy %q, container selector %q, seed %d: %w", job.policyName, job.containerSelector.Name, job.seed, err)
+		return RunResult{}, fmt.Errorf("workload %q, placement policy %q, container selector %q, seed %d: %w", spec.WorkloadName, spec.PolicyName, selectorName, spec.Config.Seed, err)
 	}
-	containerSelector, err := policy.NewContainerSelector(job.containerSelector.Name, job.containerSelector.K)
+	containerSelector, err := policy.NewContainerSelector(selectorName, spec.ContainerSelector.K)
 	if err != nil {
-		return RunResult{}, fmt.Errorf("placement policy %q, container selector %q, seed %d: %w", job.policyName, job.containerSelector.Name, job.seed, err)
+		return RunResult{}, fmt.Errorf("workload %q, placement policy %q, container selector %q, seed %d: %w", spec.WorkloadName, spec.PolicyName, selectorName, spec.Config.Seed, err)
 	}
 
-	simulation, err := engine.Run(containerSelector, placementPolicy, simulationConfig.Iterations)
+	simulation, err := engine.Run(containerSelector, placementPolicy, spec.Iterations)
 	if err != nil {
-		return RunResult{}, fmt.Errorf("placement policy %q, container selector %q, seed %d: run simulation: %w", job.policyName, containerSelector.Name(), job.seed, err)
+		return RunResult{}, fmt.Errorf("workload %q, placement policy %q, container selector %q, seed %d: run simulation: %w", spec.WorkloadName, spec.PolicyName, containerSelector.Name(), spec.Config.Seed, err)
 	}
 
 	result := RunResult{
-		WorkloadName:          workloadName,
+		WorkloadName:          spec.WorkloadName,
 		PolicyName:            placementPolicy.Name(),
 		ContainerSelectorName: containerSelector.Name(),
-		Seed:                  job.seed,
+		Seed:                  spec.Config.Seed,
 		Simulation:            simulation,
-		Evaluations:           make([]evaluationResult, len(evaluations)),
+		Evaluations:           make([]evaluationResult, len(spec.Evaluations)),
 	}
-	for i, evaluation := range evaluations {
+	for i, evaluation := range spec.Evaluations {
 		result.Evaluations[i] = evaluationResult{
 			evaluation: evaluation,
 			value:      evaluator.EvaluateSimulation(engine, evaluation),
