@@ -14,9 +14,11 @@ type ContainerSelectionContext struct {
 	Batch      []QueuedBox // boxes from current batch not yet placed
 }
 
-// Decides the order in which we should try to place into bins.
+// ContainerSelector ranks existing containers in the order the simulation
+// should try them for a box.
 type ContainerSelector interface {
 	Rank(ContainerSelectionContext, Box) []int // container IDs, best first
+	Name() string
 }
 
 // We feed the output of ContainerSelector.Rank() one-by-one into the PlacementPolicy

@@ -1,13 +1,16 @@
-/*
-Keeps only the most recently opened bin(s) available.
-*/
 package policy
 
 import (
+	"fmt"
+
 	"packing_simulator/backend"
 )
 
 type ContainerSelectorNextFit struct{}
+
+func (ContainerSelectorNextFit) Name() string {
+	return ContainerSelectorNextFitName
+}
 
 // Rank returns only the most recently opened container. If that container
 // cannot accept the box, the simulation engine is responsible for opening a
@@ -27,6 +30,10 @@ func (ContainerSelectorNextFit) Rank(
 // available, trying the oldest of those containers first.
 type ContainerSelectorNextKFit struct {
 	K int
+}
+
+func (cs ContainerSelectorNextKFit) Name() string {
+	return fmt.Sprintf("%s(k=%d)", ContainerSelectorNextKFitName, cs.K)
 }
 
 func (cs ContainerSelectorNextKFit) Rank(

@@ -38,10 +38,12 @@ func main() {
 	}
 
 	recording, err := frontend.RecordSimulation(frontend.SimulationSpec{
-		ID:         "simulation-1",
-		Config:     values.BackendConfig(),
-		Iterations: *values.Iterations,
-		PolicyName: *values.PolicyName,
+		ID:                    "simulation-1",
+		Config:                values.BackendConfig(),
+		Iterations:            *values.Iterations,
+		PolicyName:            *values.PolicyName,
+		ContainerSelectorName: *values.ContainerSelectorName,
+		ContainerSelectorK:    *values.ContainerSelectorK,
 	})
 	if err != nil {
 		log.Fatal(err)

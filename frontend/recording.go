@@ -14,21 +14,24 @@ import (
 const DefaultFrameDelayMS = 250
 
 type SimulationSpec struct {
-	ID         string
-	Config     backend.SimulationConfig
-	Iterations int
-	PolicyName string
+	ID                    string
+	Config                backend.SimulationConfig
+	Iterations            int
+	PolicyName            string
+	ContainerSelectorName string
+	ContainerSelectorK    int
 }
 
 type SimulationRecording struct {
-	ID           string            `json:"id"`
-	Policy       string            `json:"policy"`
-	Seed         int64             `json:"seed"`
-	Width        int               `json:"width"`
-	Height       int               `json:"height"`
-	QueueLimit   int               `json:"queueLimit"`
-	FrameDelayMS int               `json:"frameDelayMs"`
-	Frames       []SimulationFrame `json:"frames"`
+	ID                string            `json:"id"`
+	Policy            string            `json:"policy"`
+	ContainerSelector string            `json:"containerSelector"`
+	Seed              int64             `json:"seed"`
+	Width             int               `json:"width"`
+	Height            int               `json:"height"`
+	QueueLimit        int               `json:"queueLimit"`
+	FrameDelayMS      int               `json:"frameDelayMs"`
+	Frames            []SimulationFrame `json:"frames"`
 }
 
 type SimulationFrame struct {
@@ -79,7 +82,10 @@ func RecordSimulation(spec SimulationSpec) (SimulationRecording, error) {
 	if err != nil {
 		return SimulationRecording{}, err
 	}
-	containerSelector := policy.ContainerSelectorFirstFit{}
+	containerSelector, err := policy.NewContainerSelector(spec.ContainerSelectorName, spec.ContainerSelectorK)
+	if err != nil {
+		return SimulationRecording{}, fmt.Errorf("create container selector: %w", err)
+	}
 	initialContainer := engine.World().Containers[0]
 
 	id := spec.ID
@@ -88,14 +94,15 @@ func RecordSimulation(spec SimulationSpec) (SimulationRecording, error) {
 	}
 
 	recording := SimulationRecording{
-		ID:           id,
-		Policy:       placementPolicy.Name(),
-		Seed:         spec.Config.Seed,
-		Width:        initialContainer.Width(),
-		Height:       initialContainer.Height(),
-		QueueLimit:   engine.World().Queue.Limit,
-		FrameDelayMS: DefaultFrameDelayMS,
-		Frames:       make([]SimulationFrame, 0, spec.Iterations+1),
+		ID:                id,
+		Policy:            placementPolicy.Name(),
+		ContainerSelector: containerSelector.Name(),
+		Seed:              spec.Config.Seed,
+		Width:             initialContainer.Width(),
+		Height:            initialContainer.Height(),
+		QueueLimit:        engine.World().Queue.Limit,
+		FrameDelayMS:      DefaultFrameDelayMS,
+		Frames:            make([]SimulationFrame, 0, spec.Iterations+1),
 	}
 
 	recording.Frames = append(recording.Frames, captureFrame(engine, nil, backend.SimulationResult{}))
@@ -118,6 +125,9 @@ func RecordSimulation(spec SimulationSpec) (SimulationRecording, error) {
 
 func captureFrame(engine *backend.SimulationEngine, timestamp *int, result backend.SimulationResult) SimulationFrame {
 	world := engine.World()
+	// The browser visualizer currently renders the first container only. Its
+	// statistics and evaluations remain world-level; multi-container frames are
+	// deferred until the visualizer gains a container-selection UI.
 	return SimulationFrame{
 		Timestamp:   timestamp,
 		QueueCount:  len(world.Queue.Items),

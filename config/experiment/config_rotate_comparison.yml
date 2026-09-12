@@ -30,6 +30,9 @@ policies:
   - bottom-left
   - largest-area-bottom-left
 
+container_selectors:
+  - name: first-fit
+
 evaluators:
   - utilization
   - fragmentation

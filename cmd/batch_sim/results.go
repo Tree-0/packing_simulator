@@ -22,12 +22,29 @@ import (
 
 // configs to determine how the experiment will be run
 type experimentConfig struct {
-	Workloads     []workloadConfig `yaml:"workloads"`
-	MaxContainers int              `yaml:"max_containers"`
-	Seeds         []int64          `yaml:"seeds"`
-	Policies      []string         `yaml:"policies"`
-	Evaluators    []string         `yaml:"evaluators"`
-	Workers       int              `yaml:"workers"`
+	Workloads          []workloadConfig          `yaml:"workloads"`
+	MaxContainers      int                       `yaml:"max_containers"`
+	Seeds              []int64                   `yaml:"seeds"`
+	Policies           []string                  `yaml:"policies"`
+	ContainerSelectors []containerSelectorConfig `yaml:"container_selectors"`
+	Evaluators         []string                  `yaml:"evaluators"`
+	Workers            int                       `yaml:"workers"`
+}
+
+// containerSelectorConfig is the experiment equivalent of the shared
+// single-run container_selector YAML object. K is used only by Next K Fit.
+type containerSelectorConfig struct {
+	Name string `yaml:"name"`
+	K    int    `yaml:"k"`
+}
+
+// effectiveContainerSelectors returns the configured selectors, or the
+// historical First Fit default when older experiment configuration omits them.
+func (config experimentConfig) effectiveContainerSelectors() []containerSelectorConfig {
+	if len(config.ContainerSelectors) == 0 {
+		return []containerSelectorConfig{{Name: policy.ContainerSelectorFirstFitName}}
+	}
+	return config.ContainerSelectors
 }
 
 type workloadConfig struct {
@@ -36,27 +53,30 @@ type workloadConfig struct {
 }
 
 type RunResult struct {
-	WorkloadName string
-	PolicyName   string
-	Seed         int64
-	Simulation   backend.SimulationResult
-	Evaluations  []evaluationResult
+	WorkloadName          string
+	PolicyName            string
+	ContainerSelectorName string
+	Seed                  int64
+	Simulation            backend.SimulationResult
+	Evaluations           []evaluationResult
 }
 
 // the unique key used to aggregate RunResults
 // into AggregateResults
 type AggregateKey struct {
-	WorkloadName   string
-	PolicyName     string
-	EvaluationType evaluator.EvaluationType
+	WorkloadName          string
+	PolicyName            string
+	ContainerSelectorName string
+	EvaluationType        evaluator.EvaluationType
 }
 
-// An aggregation of RunResult objects across all seeds
-// for that (Workload, Policy, Evaluation) group
+// AggregateResult is the mean of RunResults across seeds for one workload,
+// placement-policy, container-selector, and evaluation group.
 type AggregateResult struct {
-	WorkloadName string
-	PolicyName   string
-	Evaluation   evaluationResult
+	WorkloadName          string
+	PolicyName            string
+	ContainerSelectorName string
+	Evaluation            evaluationResult
 }
 
 // loadExperimentConfig reads and validates one experiment configuration file.
@@ -131,6 +151,11 @@ func (config experimentConfig) validate() error {
 			return err
 		}
 	}
+	for _, selector := range config.effectiveContainerSelectors() {
+		if _, err := policy.NewContainerSelector(selector.Name, selector.K); err != nil {
+			return err
+		}
+	}
 	for _, name := range config.Evaluators {
 		if _, err := evaluator.ParseEvaluation(name); err != nil {
 			return err
@@ -141,11 +166,12 @@ func (config experimentConfig) validate() error {
 }
 
 // Run multiple defined workloads as part of one experiment, and return the results
-// from each individual run. There are (Workloads * Policies * Seeds) distinct runs,
-// all of which receive every evaluation type defined in the config.
+// from each individual run. There are (Workloads * Placement Policies *
+// Container Selectors * Seeds) distinct runs, all of which receive every
+// evaluation type defined in the config.
 func runExperiment(config experimentConfig) ([]RunResult, error) {
 
-	totalSimulations := len(config.Workloads) * len(config.Policies) * len(config.Seeds)
+	totalSimulations := len(config.Workloads) * len(config.Policies) * len(config.effectiveContainerSelectors()) * len(config.Seeds)
 	runResults := make([]RunResult, 0, totalSimulations)
 
 	for _, workload := range config.Workloads {
@@ -159,8 +185,8 @@ func runExperiment(config experimentConfig) ([]RunResult, error) {
 	return runResults, nil
 }
 
-// Take in all RunResults and produce the aggregated results
-// by (workload, policy, evaluation)
+// Take in all RunResults and produce the aggregated results by (workload,
+// placement policy, container selector, evaluation).
 func AggregateResults(results []RunResult) ([]AggregateResult, error) {
 	if len(results) == 0 {
 		return make([]AggregateResult, 0), nil
@@ -171,9 +197,10 @@ func AggregateResults(results []RunResult) ([]AggregateResult, error) {
 	for _, result := range results {
 		for _, eval := range result.Evaluations {
 			key := AggregateKey{
-				result.WorkloadName,
-				result.PolicyName,
-				eval.evaluation,
+				WorkloadName:          result.WorkloadName,
+				PolicyName:            result.PolicyName,
+				ContainerSelectorName: result.ContainerSelectorName,
+				EvaluationType:        eval.evaluation,
 			}
 
 			aggregateBuckets[key] = append(
@@ -181,10 +208,11 @@ func AggregateResults(results []RunResult) ([]AggregateResult, error) {
 				// append a copy of the RunResult with only the single
 				// eval type we care about for this aggregate
 				RunResult{
-					WorkloadName: result.WorkloadName,
-					PolicyName:   result.PolicyName,
-					Seed:         result.Seed,
-					Evaluations:  []evaluationResult{eval},
+					WorkloadName:          result.WorkloadName,
+					PolicyName:            result.PolicyName,
+					ContainerSelectorName: result.ContainerSelectorName,
+					Seed:                  result.Seed,
+					Evaluations:           []evaluationResult{eval},
 				},
 			)
 		}
@@ -207,11 +235,12 @@ func AggregateResults(results []RunResult) ([]AggregateResult, error) {
 		aggregateResults = append(
 			aggregateResults,
 			AggregateResult{
-				key.WorkloadName,
-				key.PolicyName,
-				evaluationResult{
-					key.EvaluationType,
-					average,
+				WorkloadName:          key.WorkloadName,
+				PolicyName:            key.PolicyName,
+				ContainerSelectorName: key.ContainerSelectorName,
+				Evaluation: evaluationResult{
+					evaluation: key.EvaluationType,
+					value:      average,
 				},
 			},
 		)
@@ -240,6 +269,9 @@ func PrintRunResults(config experimentConfig, results []RunResult) {
 		if left.PolicyName != right.PolicyName {
 			return left.PolicyName < right.PolicyName
 		}
+		if left.ContainerSelectorName != right.ContainerSelectorName {
+			return left.ContainerSelectorName < right.ContainerSelectorName
+		}
 		return left.Seed < right.Seed
 	})
 
@@ -261,8 +293,9 @@ func PrintRunResults(config experimentConfig, results []RunResult) {
 		}
 
 		fmt.Printf(
-			"Policy: %s  Seed: %d\n",
+			"Placement policy: %s  Container selector: %s  Seed: %d\n",
 			result.PolicyName,
+			result.ContainerSelectorName,
 			result.Seed,
 		)
 		fmt.Printf(
@@ -312,12 +345,16 @@ func PrintAggregateResults(config experimentConfig, results []AggregateResult) {
 		if left.PolicyName != right.PolicyName {
 			return left.PolicyName < right.PolicyName
 		}
+		if left.ContainerSelectorName != right.ContainerSelectorName {
+			return left.ContainerSelectorName < right.ContainerSelectorName
+		}
 		return left.Evaluation.evaluation < right.Evaluation.evaluation
 	})
 
 	fmt.Println("Aggregate results (mean across seeds):")
 	currentWorkload := ""
 	currentPolicy := ""
+	currentContainerSelector := ""
 	for _, result := range sortedResults {
 		if result.WorkloadName != currentWorkload {
 			if currentWorkload != "" {
@@ -333,11 +370,18 @@ func PrintAggregateResults(config experimentConfig, results []AggregateResult) {
 			fmt.Println()
 			currentWorkload = result.WorkloadName
 			currentPolicy = ""
+			currentContainerSelector = ""
 		}
 
 		if result.PolicyName != currentPolicy {
-			fmt.Printf("Policy: %s\n", result.PolicyName)
+			fmt.Printf("Placement policy: %s\n", result.PolicyName)
 			currentPolicy = result.PolicyName
+			currentContainerSelector = ""
+		}
+
+		if result.ContainerSelectorName != currentContainerSelector {
+			fmt.Printf("Container selector: %s\n", result.ContainerSelectorName)
+			currentContainerSelector = result.ContainerSelectorName
 		}
 
 		switch result.Evaluation.evaluation {

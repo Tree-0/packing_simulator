@@ -39,8 +39,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	containerSelector := policy.ContainerSelectorFirstFit{}
-	policy, err := policy.NewPlacementPolicy(*values.PolicyName)
+	placementPolicy, err := policy.NewPlacementPolicy(*values.PolicyName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	containerSelector, err := policy.NewContainerSelector(*values.ContainerSelectorName, *values.ContainerSelectorK)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -50,7 +53,7 @@ func main() {
 		fmt.Print("\033[?25l") // Hide the cursor while animating.
 		result, err = engine.RunWithObserver(
 			containerSelector,
-			policy,
+			placementPolicy,
 			*values.Iterations,
 			func(timestamp int, world *backend.World) error {
 				if !firstFrame {
@@ -75,13 +78,14 @@ func main() {
 		}
 		fmt.Println()
 	} else {
-		result, err = engine.Run(containerSelector, policy, *values.Iterations)
+		result, err = engine.Run(containerSelector, placementPolicy, *values.Iterations)
 	}
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Policy: %s\n", policy.Name())
+	fmt.Printf("Placement policy: %s\n", placementPolicy.Name())
+	fmt.Printf("Container selector: %s\n", containerSelector.Name())
 	fmt.Printf("Seed: %d\n", *values.Seed)
 	fmt.Printf(
 		"Iterations: %d, generated: %d, placed: %d, rotated: %d, rejected: %d, batches: %d\n",

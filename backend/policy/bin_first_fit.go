@@ -1,6 +1,3 @@
-/*
-Keeps all bins open.
-*/
 package policy
 
 import (
@@ -9,9 +6,12 @@ import (
 
 type ContainerSelectorFirstFit struct{}
 
-// Since we want first available box, we don't do any ordering.
-// returns the ids of all boxes in unchanged order.
-func (cs ContainerSelectorFirstFit) Rank(
+func (ContainerSelectorFirstFit) Name() string {
+	return ContainerSelectorFirstFitName
+}
+
+// Rank returns every existing container in creation order.
+func (ContainerSelectorFirstFit) Rank(
 	context backend.ContainerSelectionContext,
 	_ backend.Box,
 ) []int {

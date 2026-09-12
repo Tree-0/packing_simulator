@@ -58,6 +58,41 @@ func TestNewPolicy(t *testing.T) {
 	}
 }
 
+func TestNewContainerSelector(t *testing.T) {
+	tests := []struct {
+		name     string
+		k        int
+		wantName string
+		wantErr  bool
+	}{
+		{name: "", wantName: ContainerSelectorFirstFitName},
+		{name: " FIRST-FIT ", wantName: ContainerSelectorFirstFitName},
+		{name: ContainerSelectorNextFitName, wantName: ContainerSelectorNextFitName},
+		{name: ContainerSelectorNextKFitName, k: 3, wantName: "next-k-fit(k=3)"},
+		{name: ContainerSelectorNextKFitName, wantErr: true},
+		{name: ContainerSelectorFirstFitName, k: 1, wantErr: true},
+		{name: "not-a-selector", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selector, err := NewContainerSelector(tt.name, tt.k)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("NewContainerSelector() returned nil error; want an error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if selector.Name() != tt.wantName {
+				t.Errorf("NewContainerSelector(%q, %d).Name() = %q; want %q", tt.name, tt.k, selector.Name(), tt.wantName)
+			}
+		})
+	}
+}
+
 func TestBottomLeftPolicyOnlyRotatedOrientationFits(t *testing.T) {
 	container, err := backend.NewContainer(1, 2, 1)
 	if err != nil {

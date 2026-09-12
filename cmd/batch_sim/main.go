@@ -1,6 +1,6 @@
 /*
-run a group of simulations off of the same seed.
-runs all combinations of the provided evaluators and packing policies.
+Run a group of simulations over the configured workload, seed, placement-policy,
+and container-selector combinations.
 */
 
 package main
@@ -32,9 +32,10 @@ type simulationConfig struct {
 }
 
 type workloadJob struct {
-	index      int
-	policyName string
-	seed       int64
+	index             int
+	policyName        string
+	containerSelector containerSelectorConfig
+	seed              int64
 }
 
 type evaluationResult struct {
@@ -109,15 +110,20 @@ func runWorkload(workload workloadConfig, config experimentConfig) ([]RunResult,
 		evaluations[i] = evaluation
 	}
 
-	// Create jobs for all combinations of policy and seed for this workload.
-	jobs := make([]workloadJob, 0, len(config.Policies)*len(config.Seeds))
+	// Create jobs for every placement-policy, container-selector, and seed
+	// combination for this workload.
+	selectors := config.effectiveContainerSelectors()
+	jobs := make([]workloadJob, 0, len(config.Policies)*len(selectors)*len(config.Seeds))
 	for _, policyName := range config.Policies {
-		for _, seed := range config.Seeds {
-			jobs = append(jobs, workloadJob{
-				index:      len(jobs),
-				policyName: policyName,
-				seed:       seed,
-			})
+		for _, containerSelector := range selectors {
+			for _, seed := range config.Seeds {
+				jobs = append(jobs, workloadJob{
+					index:             len(jobs),
+					policyName:        policyName,
+					containerSelector: containerSelector,
+					seed:              seed,
+				})
+			}
 		}
 	}
 
@@ -187,26 +193,30 @@ func runJob(
 ) (RunResult, error) {
 	engine, err := backend.NewSimulationEngine(simulationConfig.toBackendConfig(job.seed, maxContainers))
 	if err != nil {
-		return RunResult{}, fmt.Errorf("policy %q, seed %d: create engine: %w", job.policyName, job.seed, err)
+		return RunResult{}, fmt.Errorf("placement policy %q, container selector %q, seed %d: create engine: %w", job.policyName, job.containerSelector.Name, job.seed, err)
 	}
 
-	containerSelector := policy.ContainerSelectorFirstFit{}
-	policy, err := policy.NewPlacementPolicy(job.policyName)
+	placementPolicy, err := policy.NewPlacementPolicy(job.policyName)
 	if err != nil {
-		return RunResult{}, fmt.Errorf("policy %q, seed %d: %w", job.policyName, job.seed, err)
+		return RunResult{}, fmt.Errorf("placement policy %q, container selector %q, seed %d: %w", job.policyName, job.containerSelector.Name, job.seed, err)
+	}
+	containerSelector, err := policy.NewContainerSelector(job.containerSelector.Name, job.containerSelector.K)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("placement policy %q, container selector %q, seed %d: %w", job.policyName, job.containerSelector.Name, job.seed, err)
 	}
 
-	simulation, err := engine.Run(containerSelector, policy, simulationConfig.Iterations)
+	simulation, err := engine.Run(containerSelector, placementPolicy, simulationConfig.Iterations)
 	if err != nil {
-		return RunResult{}, fmt.Errorf("policy %q, seed %d: run simulation: %w", job.policyName, job.seed, err)
+		return RunResult{}, fmt.Errorf("placement policy %q, container selector %q, seed %d: run simulation: %w", job.policyName, containerSelector.Name(), job.seed, err)
 	}
 
 	result := RunResult{
-		WorkloadName: workloadName,
-		PolicyName:   policy.Name(),
-		Seed:         job.seed,
-		Simulation:   simulation,
-		Evaluations:  make([]evaluationResult, len(evaluations)),
+		WorkloadName:          workloadName,
+		PolicyName:            placementPolicy.Name(),
+		ContainerSelectorName: containerSelector.Name(),
+		Seed:                  job.seed,
+		Simulation:            simulation,
+		Evaluations:           make([]evaluationResult, len(evaluations)),
 	}
 	for i, evaluation := range evaluations {
 		result.Evaluations[i] = evaluationResult{

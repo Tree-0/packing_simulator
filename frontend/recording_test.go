@@ -32,6 +32,9 @@ func TestRecordSimulationCapturesInitialAndTimestampFrames(t *testing.T) {
 	if recording.ID != "test-simulation" || recording.Width != 3 || recording.Height != 2 || recording.QueueLimit != 1 {
 		t.Errorf("recording metadata = %+v", recording)
 	}
+	if recording.ContainerSelector != policy.ContainerSelectorFirstFitName {
+		t.Errorf("recording container selector = %q; want %q", recording.ContainerSelector, policy.ContainerSelectorFirstFitName)
+	}
 	if len(recording.Frames) != 3 {
 		t.Fatalf("frame count = %d; want initial plus 2 timestamps", len(recording.Frames))
 	}

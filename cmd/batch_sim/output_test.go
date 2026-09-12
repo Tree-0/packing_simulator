@@ -14,9 +14,10 @@ func TestWriteExperimentResultsCSV(t *testing.T) {
 	paths, err := writeExperimentResultsCSV(
 		t.TempDir(),
 		[]RunResult{{
-			WorkloadName: "small",
-			PolicyName:   "bottom-left",
-			Seed:         42,
+			WorkloadName:          "small",
+			PolicyName:            "bottom-left",
+			ContainerSelectorName: "next-k-fit(k=3)",
+			Seed:                  42,
 			Simulation: backend.SimulationResult{
 				Iterations: 4,
 				Generated:  4,
@@ -30,8 +31,9 @@ func TestWriteExperimentResultsCSV(t *testing.T) {
 			}},
 		}},
 		[]AggregateResult{{
-			WorkloadName: "small",
-			PolicyName:   "bottom-left",
+			WorkloadName:          "small",
+			PolicyName:            "bottom-left",
+			ContainerSelectorName: "next-k-fit(k=3)",
 			Evaluation: evaluationResult{
 				evaluation: evaluator.ContainerUtilization,
 				value:      0.75,
@@ -46,14 +48,14 @@ func TestWriteExperimentResultsCSV(t *testing.T) {
 	}
 
 	if got, want := readCSVRecords(t, paths[0]), [][]string{
-		{"workload", "policy", "seed", "iterations", "generated", "placed", "rotated", "rejected", "batches", "stopped_early", "evaluation", "value"},
-		{"small", "bottom-left", "42", "4", "4", "3", "0", "1", "2", "false", "Container utilization", "0.75"},
+		{"workload", "policy", "container_selector", "seed", "iterations", "generated", "placed", "rotated", "rejected", "batches", "stopped_early", "evaluation", "value"},
+		{"small", "bottom-left", "next-k-fit(k=3)", "42", "4", "4", "3", "0", "1", "2", "false", "Container utilization", "0.75"},
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("run CSV records = %v; want %v", got, want)
 	}
 	if got, want := readCSVRecords(t, paths[1]), [][]string{
-		{"workload", "policy", "evaluation", "mean"},
-		{"small", "bottom-left", "Container utilization", "0.75"},
+		{"workload", "policy", "container_selector", "evaluation", "mean"},
+		{"small", "bottom-left", "next-k-fit(k=3)", "Container utilization", "0.75"},
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("aggregate CSV records = %v; want %v", got, want)
 	}

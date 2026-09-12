@@ -13,6 +13,11 @@ Need policies to do the following, in order:
 
 ### Container Choice Policies:
 
+For this 2D simulator, a container-choice policy ranks container IDs; it does
+not determine geometric fit itself. The simulation asks the placement policy to
+try each ranked container in order, and opens a new container only if none of
+them yields a placement.
+
 #### Online Algorithms
 **Some simpler policies:**
 - [X] Next Fit:
@@ -48,4 +53,4 @@ Need policies to do the following, in order:
 - Next-fit Decreasing
     - Orders items by descending size, then calls online Next Fit
 - Modified First-Fit Decreasing
-    - Classify items into four size classes ( > 1/2 bin, > 1/3 bin, > 1/6 bin, smaller). 
+    - Classify items into four size classes ( > 1/2 bin, > 1/3 bin, > 1/6 bin, smaller).
