@@ -36,7 +36,7 @@ func findPlacementHelper(
 }
 
 func (BottomLeftPolicy) FindPlacement(
-	context backend.PolicyContext,
+	context backend.PlacementContext,
 	box backend.Box,
 ) (backend.PlacementDecision, bool) {
 	container := context.Container

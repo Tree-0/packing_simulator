@@ -38,6 +38,7 @@ func TestLoad(t *testing.T) {
 	path := writeConfig(t, `simulation:
   container_height: 4
   container_width: 7
+  max_containers: 3
   queue_size: 2
   min_box_height: 1
   max_box_height: 2
@@ -47,6 +48,9 @@ func TestLoad(t *testing.T) {
   seed: 42
   allow_box_rotation: true
 policy: bottom-left
+container_selector:
+  name: next-k-fit
+  k: 3
 animate: -1
 `)
 
@@ -54,10 +58,10 @@ animate: -1
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Simulation.ContainerHeight != 4 || config.Simulation.ContainerWidth != 7 || config.Simulation.Iterations != 9 {
+	if config.Simulation.ContainerHeight != 4 || config.Simulation.ContainerWidth != 7 || config.Simulation.MaxContainers != 3 || config.Simulation.Iterations != 9 {
 		t.Errorf("simulation config = %+v", config.Simulation)
 	}
-	if config.Policy != "bottom-left" || config.Animate != -1 {
+	if config.Policy != "bottom-left" || config.ContainerSelector.Name != "next-k-fit" || config.ContainerSelector.K != 3 || config.Animate != -1 {
 		t.Errorf("file config = %+v", config)
 	}
 }

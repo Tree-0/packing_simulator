@@ -17,14 +17,23 @@ import (
 const DefaultPath = "config/simulate/config.yml"
 
 type File struct {
-	Simulation Simulation `yaml:"simulation"`
-	Policy     string     `yaml:"policy"`
-	Animate    int        `yaml:"animate"`
+	Simulation        Simulation              `yaml:"simulation"`
+	Policy            string                  `yaml:"policy"`
+	ContainerSelector ContainerSelectorConfig `yaml:"container_selector"`
+	Animate           int                     `yaml:"animate"`
+}
+
+// ContainerSelectorConfig describes how existing containers are ranked before
+// a placement policy is asked to place a box. K is used only by Next K Fit.
+type ContainerSelectorConfig struct {
+	Name string `yaml:"name"`
+	K    int    `yaml:"k"`
 }
 
 type Simulation struct {
 	ContainerHeight  int   `yaml:"container_height"`
 	ContainerWidth   int   `yaml:"container_width"`
+	MaxContainers    int   `yaml:"max_containers"`
 	QueueSize        int   `yaml:"queue_size"`
 	MinBoxHeight     int   `yaml:"min_box_height"`
 	MaxBoxHeight     int   `yaml:"max_box_height"`
@@ -37,36 +46,42 @@ type Simulation struct {
 
 // Flags contains shared single-simulation command-line values.
 type Flags struct {
-	ConfigPath       *string
-	Height           *int
-	Width            *int
-	QueueSize        *int
-	MinBoxHeight     *int
-	MaxBoxHeight     *int
-	MinBoxWidth      *int
-	MaxBoxWidth      *int
-	Iterations       *int
-	Seed             *int64
-	PolicyName       *string
-	AllowBoxRotation *bool
+	ConfigPath            *string
+	Height                *int
+	Width                 *int
+	MaxContainers         *int
+	QueueSize             *int
+	MinBoxHeight          *int
+	MaxBoxHeight          *int
+	MinBoxWidth           *int
+	MaxBoxWidth           *int
+	Iterations            *int
+	Seed                  *int64
+	PolicyName            *string
+	ContainerSelectorName *string
+	ContainerSelectorK    *int
+	AllowBoxRotation      *bool
 }
 
 // BindFlags declares the flags shared by the console and browser commands.
 // Call PathFromArgs and Load first so the chosen YAML file supplies defaults.
 func BindFlags(fs *flag.FlagSet, configPath string, config File) Flags {
 	return Flags{
-		ConfigPath:       fs.String("config", configPath, "path to the single-simulation YAML config"),
-		Height:           fs.Int("height", config.Simulation.ContainerHeight, "container height"),
-		Width:            fs.Int("width", config.Simulation.ContainerWidth, "container width"),
-		QueueSize:        fs.Int("queue-size", config.Simulation.QueueSize, "number of boxes processed per batch"),
-		MinBoxHeight:     fs.Int("min-box-height", config.Simulation.MinBoxHeight, "minimum random box height"),
-		MaxBoxHeight:     fs.Int("max-box-height", config.Simulation.MaxBoxHeight, "maximum random box height"),
-		MinBoxWidth:      fs.Int("min-box-width", config.Simulation.MinBoxWidth, "minimum random box width"),
-		MaxBoxWidth:      fs.Int("max-box-width", config.Simulation.MaxBoxWidth, "maximum random box width"),
-		Iterations:       fs.Int("iterations", config.Simulation.Iterations, "maximum number of boxes to generate"),
-		Seed:             fs.Int64("seed", config.Simulation.Seed, "random seed"),
-		PolicyName:       fs.String("policy", config.Policy, "packing policy: bottom-left or largest-area-bottom-left"),
-		AllowBoxRotation: fs.Bool("allow-box-rotation", config.Simulation.AllowBoxRotation, "whether the simulation can rotate boxes when attempting to place them"),
+		ConfigPath:            fs.String("config", configPath, "path to the single-simulation YAML config"),
+		Height:                fs.Int("height", config.Simulation.ContainerHeight, "container height"),
+		Width:                 fs.Int("width", config.Simulation.ContainerWidth, "container width"),
+		MaxContainers:         fs.Int("max-containers", config.Simulation.MaxContainers, "maximum containers; use -1 for no limit"),
+		QueueSize:             fs.Int("queue-size", config.Simulation.QueueSize, "number of boxes processed per batch"),
+		MinBoxHeight:          fs.Int("min-box-height", config.Simulation.MinBoxHeight, "minimum random box height"),
+		MaxBoxHeight:          fs.Int("max-box-height", config.Simulation.MaxBoxHeight, "maximum random box height"),
+		MinBoxWidth:           fs.Int("min-box-width", config.Simulation.MinBoxWidth, "minimum random box width"),
+		MaxBoxWidth:           fs.Int("max-box-width", config.Simulation.MaxBoxWidth, "maximum random box width"),
+		Iterations:            fs.Int("iterations", config.Simulation.Iterations, "maximum number of boxes to generate"),
+		Seed:                  fs.Int64("seed", config.Simulation.Seed, "random seed"),
+		PolicyName:            fs.String("policy", config.Policy, "packing policy: bottom-left or largest-area-bottom-left"),
+		ContainerSelectorName: fs.String("container-selector", config.ContainerSelector.Name, "container selector: first-fit, next-fit, or next-k-fit"),
+		ContainerSelectorK:    fs.Int("container-selector-k", config.ContainerSelector.K, "number of recent containers considered by next-k-fit"),
+		AllowBoxRotation:      fs.Bool("allow-box-rotation", config.Simulation.AllowBoxRotation, "whether the simulation can rotate boxes when attempting to place them"),
 	}
 }
 
@@ -74,6 +89,7 @@ func (values Flags) BackendConfig() backend.SimulationConfig {
 	return backend.SimulationConfig{
 		ContainerHeight:  *values.Height,
 		ContainerWidth:   *values.Width,
+		MaxContainers:    *values.MaxContainers,
 		QueueSize:        *values.QueueSize,
 		MinBoxHeight:     *values.MinBoxHeight,
 		MaxBoxHeight:     *values.MaxBoxHeight,

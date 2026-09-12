@@ -39,7 +39,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	policy, err := policy.NewPolicy(*values.PolicyName)
+	placementPolicy, err := policy.NewPlacementPolicy(*values.PolicyName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	containerSelector, err := policy.NewContainerSelector(*values.ContainerSelectorName, *values.ContainerSelectorK)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,7 +52,8 @@ func main() {
 		firstFrame := true
 		fmt.Print("\033[?25l") // Hide the cursor while animating.
 		result, err = engine.RunWithObserver(
-			policy,
+			containerSelector,
+			placementPolicy,
 			*values.Iterations,
 			func(timestamp int, world *backend.World) error {
 				if !firstFrame {
@@ -63,23 +68,24 @@ func main() {
 					len(world.Queue.Items),
 					world.Queue.Limit,
 				)
-				return printContainer(&world.Container)
+				return printContainers(world.Containers)
 			},
 		)
 		fmt.Print("\033[?25h") // Restore the cursor before reporting errors.
 		if firstFrame && err == nil {
 			fmt.Print("\033[2J\033[H")
-			err = printContainer(&engine.World().Container)
+			err = printContainers(engine.World().Containers)
 		}
 		fmt.Println()
 	} else {
-		result, err = engine.Run(policy, *values.Iterations)
+		result, err = engine.Run(containerSelector, placementPolicy, *values.Iterations)
 	}
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Policy: %s\n", policy.Name())
+	fmt.Printf("Placement policy: %s\n", placementPolicy.Name())
+	fmt.Printf("Container selector: %s\n", containerSelector.Name())
 	fmt.Printf("Seed: %d\n", *values.Seed)
 	fmt.Printf(
 		"Iterations: %d, generated: %d, placed: %d, rotated: %d, rejected: %d, batches: %d\n",
@@ -105,11 +111,34 @@ func main() {
 		}
 	}
 	fmt.Println()
+	printContainerMetrics(evaluator.EvaluateContainerMetrics(engine.World(), engine.UniformBoxDistribution()))
+	fmt.Println()
 
 	if *animate < 0 {
-		if err := printContainer(&engine.World().Container); err != nil {
+		if err := printContainers(engine.World().Containers); err != nil {
 			log.Fatal(err)
 		}
+	}
+}
+
+func printContainerMetrics(metrics []evaluator.ContainerMetrics) {
+	if len(metrics) == 0 {
+		fmt.Println("Per-container evaluations: no used containers")
+		return
+	}
+
+	fmt.Println("Per-container evaluations:")
+	fmt.Printf("  %-10s %12s %16s %18s %14s %14s\n", "Container", "Utilization", "Fragmentation", "Area-weighted", "Compactness", "Future fit")
+	for _, metric := range metrics {
+		fmt.Printf(
+			"  %-10d %11.1f%% %16.4f %18.4f %14.4f %13.1f%%\n",
+			metric.ContainerID,
+			100*metric.Utilization,
+			metric.Fragmentation.FragmentationScore,
+			metric.AreaWeightedFragmentation,
+			metric.Compactness,
+			100*metric.FutureFitProbability,
+		)
 	}
 }
 
@@ -130,5 +159,16 @@ func printContainer(container *backend.Container) error {
 		fmt.Println()
 	}
 
+	return nil
+}
+
+func printContainers(containers []*backend.Container) error {
+	for _, container := range containers {
+		fmt.Printf("Container %d:\n", container.Id()) // or index if no ID accessor
+		if err := printContainer(container); err != nil {
+			return err
+		}
+		fmt.Println()
+	}
 	return nil
 }

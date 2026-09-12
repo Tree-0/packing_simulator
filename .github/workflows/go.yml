@@ -26,6 +26,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/web/package-lock.json
 
+      - name: Check Go formatting
+        run: test -z "$(git ls-files '*.go' | xargs gofmt -l)"
+
       - name: Lint
         run: go vet ./...
     

@@ -10,5 +10,9 @@ simulation:
   seed: 42
   allow_box_rotation: true
 
+  max_containers: 1
+
 policy: bottom-left
+container_selector:
+  name: first-fit
 animate: -1

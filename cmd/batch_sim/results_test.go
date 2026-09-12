@@ -2,6 +2,8 @@ package main
 
 import (
 	"math"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -15,8 +17,13 @@ func TestRunExperimentProducesResultsForEveryCombination(t *testing.T) {
 			{Name: "small", Simulation: testSimulationConfig(1, 1)},
 			{Name: "wide", Simulation: testSimulationConfig(2, 1)},
 		},
-		Seeds:      []int64{41, 42},
-		Policies:   []string{policy.BottomLeftPolicyName, policy.LargestAreaBottomLeftPolicyName},
+		Seeds:    []int64{41, 42},
+		Policies: []string{policy.BottomLeftPolicyName, policy.LargestAreaBottomLeftPolicyName},
+		ContainerSelectors: []containerSelectorConfig{
+			{Name: policy.ContainerSelectorFirstFitName},
+			{Name: policy.ContainerSelectorNextFitName},
+			{Name: policy.ContainerSelectorNextKFitName, K: 2},
+		},
 		Evaluators: []string{"utilization", "fragmentation"},
 		Workers:    1,
 	}
@@ -26,14 +33,14 @@ func TestRunExperimentProducesResultsForEveryCombination(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	wantRuns := len(config.Workloads) * len(config.Seeds) * len(config.Policies)
+	wantRuns := len(config.Workloads) * len(config.Seeds) * len(config.Policies) * len(config.ContainerSelectors)
 	if len(results) != wantRuns {
 		t.Fatalf("runExperiment() produced %d runs; want %d", len(results), wantRuns)
 	}
 
 	seen := make(map[string]bool, wantRuns)
 	for _, result := range results {
-		key := result.WorkloadName + "/" + result.PolicyName + "/" + strconv.FormatInt(result.Seed, 10)
+		key := result.WorkloadName + "/" + result.PolicyName + "/" + result.ContainerSelectorName + "/" + strconv.FormatInt(result.Seed, 10)
 		if seen[key] {
 			t.Errorf("duplicate result for %s", key)
 		}
@@ -58,21 +65,25 @@ func TestRunExperimentProducesResultsForEveryCombination(t *testing.T) {
 
 func TestAggregateResultsCalculatesMeansPerWorkloadPolicyAndEvaluation(t *testing.T) {
 	runResults := []RunResult{
-		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, Seed: 1, Evaluations: []evaluationResult{
+		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorFirstFitName, Seed: 1, Evaluations: []evaluationResult{
 			{evaluation: evaluator.ContainerUtilization, value: 0.25},
 			{evaluation: evaluator.ContainerFragmentation, value: 0.60},
 		}},
-		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, Seed: 2, Evaluations: []evaluationResult{
+		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorFirstFitName, Seed: 2, Evaluations: []evaluationResult{
 			{evaluation: evaluator.ContainerUtilization, value: 0.75},
 			{evaluation: evaluator.ContainerFragmentation, value: 0.20},
 		}},
-		{WorkloadName: "large", PolicyName: policy.BottomLeftPolicyName, Seed: 1, Evaluations: []evaluationResult{
+		{WorkloadName: "large", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorFirstFitName, Seed: 1, Evaluations: []evaluationResult{
 			{evaluation: evaluator.ContainerUtilization, value: 0.50},
 			{evaluation: evaluator.ContainerFragmentation, value: 0.10},
 		}},
-		{WorkloadName: "large", PolicyName: policy.BottomLeftPolicyName, Seed: 2, Evaluations: []evaluationResult{
+		{WorkloadName: "large", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorFirstFitName, Seed: 2, Evaluations: []evaluationResult{
 			{evaluation: evaluator.ContainerUtilization, value: 0.90},
 			{evaluation: evaluator.ContainerFragmentation, value: 0.30},
+		}},
+		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorNextFitName, Seed: 1, Evaluations: []evaluationResult{
+			{evaluation: evaluator.ContainerUtilization, value: 0.90},
+			{evaluation: evaluator.ContainerFragmentation, value: 0.10},
 		}},
 	}
 
@@ -82,10 +93,12 @@ func TestAggregateResultsCalculatesMeansPerWorkloadPolicyAndEvaluation(t *testin
 	}
 
 	want := map[AggregateKey]float64{
-		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, EvaluationType: evaluator.ContainerUtilization}:   0.50,
-		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, EvaluationType: evaluator.ContainerFragmentation}: 0.40,
-		{WorkloadName: "large", PolicyName: policy.BottomLeftPolicyName, EvaluationType: evaluator.ContainerUtilization}:   0.70,
-		{WorkloadName: "large", PolicyName: policy.BottomLeftPolicyName, EvaluationType: evaluator.ContainerFragmentation}: 0.20,
+		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorFirstFitName, EvaluationType: evaluator.ContainerUtilization}:   0.50,
+		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorFirstFitName, EvaluationType: evaluator.ContainerFragmentation}: 0.40,
+		{WorkloadName: "large", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorFirstFitName, EvaluationType: evaluator.ContainerUtilization}:   0.70,
+		{WorkloadName: "large", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorFirstFitName, EvaluationType: evaluator.ContainerFragmentation}: 0.20,
+		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorNextFitName, EvaluationType: evaluator.ContainerUtilization}:    0.90,
+		{WorkloadName: "small", PolicyName: policy.BottomLeftPolicyName, ContainerSelectorName: policy.ContainerSelectorNextFitName, EvaluationType: evaluator.ContainerFragmentation}:  0.10,
 	}
 	if len(aggregates) != len(want) {
 		t.Fatalf("AggregateResults() produced %d aggregates; want %d", len(aggregates), len(want))
@@ -93,9 +106,10 @@ func TestAggregateResultsCalculatesMeansPerWorkloadPolicyAndEvaluation(t *testin
 
 	for _, aggregate := range aggregates {
 		key := AggregateKey{
-			WorkloadName:   aggregate.WorkloadName,
-			PolicyName:     aggregate.PolicyName,
-			EvaluationType: aggregate.Evaluation.evaluation,
+			WorkloadName:          aggregate.WorkloadName,
+			PolicyName:            aggregate.PolicyName,
+			ContainerSelectorName: aggregate.ContainerSelectorName,
+			EvaluationType:        aggregate.Evaluation.evaluation,
 		}
 		wantValue, found := want[key]
 		if !found {
@@ -110,6 +124,43 @@ func TestAggregateResultsCalculatesMeansPerWorkloadPolicyAndEvaluation(t *testin
 
 	for missing := range want {
 		t.Errorf("missing aggregate for %+v", missing)
+	}
+}
+
+func TestLoadExperimentConfigParsesContainerSelectors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "experiment.yml")
+	contents := `workloads:
+  - name: small
+    simulation:
+      container_height: 4
+      container_width: 4
+      queue_size: 1
+      min_box_height: 1
+      max_box_height: 1
+      min_box_width: 1
+      max_box_width: 1
+      iterations: 1
+      allow_box_rotation: false
+max_containers: 1
+seeds: [1]
+policies: [bottom-left]
+container_selectors:
+  - name: next-k-fit
+    k: 2
+evaluators: [utilization]
+workers: 1
+`
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := loadExperimentConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []containerSelectorConfig{{Name: policy.ContainerSelectorNextKFitName, K: 2}}
+	if len(config.ContainerSelectors) != len(want) || config.ContainerSelectors[0] != want[0] {
+		t.Errorf("container selectors = %+v; want %+v", config.ContainerSelectors, want)
 	}
 }
 

@@ -35,12 +35,15 @@ func writeExperimentResultsCSV(
 		if left.PolicyName != right.PolicyName {
 			return left.PolicyName < right.PolicyName
 		}
+		if left.ContainerSelectorName != right.ContainerSelectorName {
+			return left.ContainerSelectorName < right.ContainerSelectorName
+		}
 		return left.Seed < right.Seed
 	})
 
 	if err := writeCSV(runPath, func(writer *csv.Writer) error {
 		if err := writer.Write([]string{
-			"workload", "policy", "seed", "iterations", "generated", "placed", "rotated",
+			"workload", "policy", "container_selector", "seed", "iterations", "generated", "placed", "rotated",
 			"rejected", "batches", "stopped_early", "evaluation", "value",
 		}); err != nil {
 			return err
@@ -51,6 +54,7 @@ func writeExperimentResultsCSV(
 				if err := writer.Write([]string{
 					result.WorkloadName,
 					result.PolicyName,
+					result.ContainerSelectorName,
 					strconv.FormatInt(result.Seed, 10),
 					strconv.Itoa(result.Simulation.Iterations),
 					strconv.Itoa(result.Simulation.Generated),
@@ -81,11 +85,14 @@ func writeExperimentResultsCSV(
 		if left.PolicyName != right.PolicyName {
 			return left.PolicyName < right.PolicyName
 		}
+		if left.ContainerSelectorName != right.ContainerSelectorName {
+			return left.ContainerSelectorName < right.ContainerSelectorName
+		}
 		return left.Evaluation.evaluation < right.Evaluation.evaluation
 	})
 
 	if err := writeCSV(aggregatePath, func(writer *csv.Writer) error {
-		if err := writer.Write([]string{"workload", "policy", "evaluation", "mean"}); err != nil {
+		if err := writer.Write([]string{"workload", "policy", "container_selector", "evaluation", "mean"}); err != nil {
 			return err
 		}
 
@@ -93,6 +100,7 @@ func writeExperimentResultsCSV(
 			if err := writer.Write([]string{
 				result.WorkloadName,
 				result.PolicyName,
+				result.ContainerSelectorName,
 				result.Evaluation.evaluation.String(),
 				strconv.FormatFloat(result.Evaluation.value, 'g', -1, 64),
 			}); err != nil {

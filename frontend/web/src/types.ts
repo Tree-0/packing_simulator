@@ -10,12 +10,21 @@ export interface SimulationStats {
   stoppedEarly: boolean
 }
 
-export interface PlacedBox {
+export interface RecordedBox {
+  frameIndex: number
   id: number
   x: number
   y: number
   width: number
   height: number
+}
+
+export interface ContainerRecording {
+  id: number
+  width: number
+  height: number
+  createdFrame: number
+  boxes: RecordedBox[]
 }
 
 export interface EvaluationValue {
@@ -28,18 +37,18 @@ export interface SimulationFrame {
   timestamp: number | null
   queueCount: number
   stats: SimulationStats
-  boxes: PlacedBox[]
   evaluations: EvaluationValue[]
 }
 
 export interface SimulationRecording {
   id: string
+  workload: string
   policy: string
+  containerSelector: string
   seed: number
-  width: number
-  height: number
   queueLimit: number
   frameDelayMs: number
+  containers: ContainerRecording[]
   frames: SimulationFrame[]
 }
 

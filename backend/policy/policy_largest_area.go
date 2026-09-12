@@ -29,7 +29,7 @@ func (LargestAreaBottomLeftPolicy) OrderBatch(batch []backend.QueuedBox) []backe
 // Same as BottomLeftPolicy, but the OrderBatch function will have been called by
 // the simulation engine to change the order in which boxes are placed.
 func (LargestAreaBottomLeftPolicy) FindPlacement(
-	context backend.PolicyContext,
+	context backend.PlacementContext,
 	box backend.Box,
 ) (backend.PlacementDecision, bool) {
 	container := context.Container

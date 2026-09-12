@@ -41,7 +41,7 @@ func TestNewPolicy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			policy, err := NewPolicy(tt.name)
+			policy, err := NewPlacementPolicy(tt.name)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("NewPolicy() returned nil error; want an error")
@@ -58,8 +58,43 @@ func TestNewPolicy(t *testing.T) {
 	}
 }
 
+func TestNewContainerSelector(t *testing.T) {
+	tests := []struct {
+		name     string
+		k        int
+		wantName string
+		wantErr  bool
+	}{
+		{name: "", wantName: ContainerSelectorFirstFitName},
+		{name: " FIRST-FIT ", wantName: ContainerSelectorFirstFitName},
+		{name: ContainerSelectorNextFitName, wantName: ContainerSelectorNextFitName},
+		{name: ContainerSelectorNextKFitName, k: 3, wantName: "next-k-fit(k=3)"},
+		{name: ContainerSelectorNextKFitName, wantErr: true},
+		{name: ContainerSelectorFirstFitName, k: 1, wantErr: true},
+		{name: "not-a-selector", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selector, err := NewContainerSelector(tt.name, tt.k)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("NewContainerSelector() returned nil error; want an error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if selector.Name() != tt.wantName {
+				t.Errorf("NewContainerSelector(%q, %d).Name() = %q; want %q", tt.name, tt.k, selector.Name(), tt.wantName)
+			}
+		})
+	}
+}
+
 func TestBottomLeftPolicyOnlyRotatedOrientationFits(t *testing.T) {
-	container, err := backend.NewContainer(1, 2)
+	container, err := backend.NewContainer(1, 2, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +132,7 @@ func TestSimulationRecordsRotatedPlacement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := engine.Run(BottomLeftPolicy{}, 1)
+	result, err := engine.Run(ContainerSelectorFirstFit{}, BottomLeftPolicy{}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +140,7 @@ func TestSimulationRecordsRotatedPlacement(t *testing.T) {
 		t.Fatalf("Run() result = %+v; want one placed and one rotated box", result)
 	}
 
-	container := &engine.World().Container
+	container := engine.World().Containers[0]
 	for x := 0; x < 2; x++ {
 		cell, err := container.Cell(x, 1)
 		if err != nil {
@@ -118,7 +153,7 @@ func TestSimulationRecordsRotatedPlacement(t *testing.T) {
 }
 
 func TestBottomLeftPolicyChoosesOriginalOrientationWhenItIsLower(t *testing.T) {
-	container, err := backend.NewContainer(3, 3)
+	container, err := backend.NewContainer(3, 3, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +175,7 @@ func TestBottomLeftPolicyChoosesOriginalOrientationWhenItIsLower(t *testing.T) {
 }
 
 func TestBottomLeftPolicyChoosesRotatedOrientationWhenItIsLower(t *testing.T) {
-	container, err := backend.NewContainer(3, 3)
+	container, err := backend.NewContainer(3, 3, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +197,7 @@ func TestBottomLeftPolicyChoosesRotatedOrientationWhenItIsLower(t *testing.T) {
 }
 
 func TestBottomLeftPolicyPrefersOriginalOrientationOnTie(t *testing.T) {
-	container, err := backend.NewContainer(3, 2)
+	container, err := backend.NewContainer(3, 2, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +222,7 @@ func TestBottomLeftPolicyPrefersOriginalOrientationOnTie(t *testing.T) {
 }
 
 func TestBottomLeftPolicyChoosesOriginalOrientationWhenItIsLeftmost(t *testing.T) {
-	container, err := backend.NewContainer(3, 3)
+	container, err := backend.NewContainer(3, 3, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +252,7 @@ func TestBottomLeftPolicyChoosesOriginalOrientationWhenItIsLeftmost(t *testing.T
 }
 
 func TestBottomLeftPolicyChoosesRotatedOrientationWhenItIsLeftmost(t *testing.T) {
-	container, err := backend.NewContainer(3, 3)
+	container, err := backend.NewContainer(3, 3, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,10 +319,10 @@ func TestLargestAreaBottomLeftMatchesFIFOWhenBatchIsAlreadySorted(t *testing.T) 
 	}
 }
 
-func runPolicyBatch(t *testing.T, p backend.Policy, batch []backend.QueuedBox) *backend.Container {
+func runPolicyBatch(t *testing.T, p backend.PlacementPolicy, batch []backend.QueuedBox) *backend.Container {
 	t.Helper()
 
-	container, err := backend.NewContainer(3, 4)
+	container, err := backend.NewContainer(3, 4, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,8 +355,8 @@ func runPolicyBatch(t *testing.T, p backend.Policy, batch []backend.QueuedBox) *
 	return container
 }
 
-func newPolicyContext(container *backend.Container, batch []backend.QueuedBox) backend.PolicyContext {
-	return backend.PolicyContext{
+func newPolicyContext(container *backend.Container, batch []backend.QueuedBox) backend.PlacementContext {
+	return backend.PlacementContext{
 		Container: container.ContainerSnapshot(),
 		Batch:     append([]backend.QueuedBox(nil), batch...),
 	}

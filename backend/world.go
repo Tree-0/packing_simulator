@@ -4,7 +4,10 @@ World state model; Boxes, Container (grid), box queue
 
 package backend
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 const EmptyCell = 0
 
@@ -47,6 +50,7 @@ type QueuedBox struct {
 
 // The grid of placed boxes
 type Container struct {
+	id int
 	// slots 0 -> n-1
 	height       int
 	width        int
@@ -59,8 +63,17 @@ type Container struct {
 // Passed to policies as part of a PolicyContext for
 // use in making placement decisions.
 type ContainerSnapshot struct {
+	id           int // same ID as the container it comes from
 	occupiedArea int
 	index        occupancyIndex
+}
+
+func (c *Container) Id() int {
+	return c.id
+}
+
+func (s *ContainerSnapshot) Id() int {
+	return s.id
 }
 
 func (c *Container) Height() int {
@@ -95,7 +108,7 @@ func (s *ContainerSnapshot) OccupiedArea() int {
 	return s.occupiedArea
 }
 
-func NewContainer(height, width int) (*Container, error) {
+func NewContainer(height, width int, id int) (*Container, error) {
 	if width <= 0 || height <= 0 {
 		return nil, errors.New("dimensions must be positive")
 	}
@@ -106,6 +119,7 @@ func NewContainer(height, width int) (*Container, error) {
 	}
 
 	return &Container{
+		id:         id,
 		height:     height,
 		width:      width,
 		cells:      cells,
@@ -119,6 +133,7 @@ func (c *Container) ContainerSnapshot() ContainerSnapshot {
 	}
 
 	return ContainerSnapshot{
+		id:           c.id,
 		occupiedArea: c.occupiedArea,
 		index:        newOccupancyIndex(c), //value
 	}
@@ -328,8 +343,9 @@ func (q *BoxQueue) Drain() []QueuedBox {
 
 // The full world state model
 type World struct {
-	Container Container
-	Queue     BoxQueue
+	nextContainerId int // 1-indexed
+	Containers      []*Container
+	Queue           BoxQueue
 }
 
 func NewWorld(height, width int, queueSize int) (*World, error) {
@@ -337,16 +353,60 @@ func NewWorld(height, width int, queueSize int) (*World, error) {
 		return nil, errors.New("queue size must be positive")
 	}
 
-	container, err := NewContainer(height, width)
-	if err != nil {
-		return nil, err
-	}
-
-	return &World{
-		Container: *container,
+	world := World{
+		nextContainerId: 1,
+		Containers:      []*Container{},
 		Queue: BoxQueue{
 			Items: make([]QueuedBox, 0, queueSize),
 			Limit: queueSize,
 		},
-	}, nil
+	}
+
+	_, err := world.NewContainer(height, width)
+	if err != nil {
+		return nil, errors.New("failed to create/append container when initializing a World")
+	}
+
+	return &world, nil
+}
+
+// Given a container ID, retrieve reference to it. IDs are 1-indexed.
+func (w *World) ContainerById(id int) (*Container, error) {
+	// currently, container have 1-indexed IDs, are stored sequentially in a slice,
+	// and are never removed or deleted during the lifetime of the simulation. Because of this,
+	// we can access them directly by indexing with container.id - 1.
+	if id < 1 || id > len(w.Containers) {
+		return nil, fmt.Errorf(
+			"container %d does not exist (out of bounds); must be between 1 and %d",
+			id, len(w.Containers),
+		)
+	}
+
+	return w.Containers[id-1], nil
+}
+
+// Adds a new container to the world's list of containers and returns a reference to it.
+// Use this function when creating containers that will be added to the world, as it
+// manages auto-incrementing containerID state.
+func (w *World) NewContainer(height, width int) (*Container, error) {
+
+	container, err := NewContainer(height, width, w.nextContainerId)
+	if err != nil {
+		return nil, err
+	}
+
+	w.Containers = append(w.Containers, container)
+	w.nextContainerId += 1
+
+	return container, nil
+}
+
+// return a list of snapshots for every container in the world.
+func (w *World) ContainerSnapshots() []ContainerSnapshot {
+	snapshots := make([]ContainerSnapshot, 0, len(w.Containers))
+	for _, container := range w.Containers {
+		snapshots = append(snapshots, container.ContainerSnapshot())
+	}
+
+	return snapshots
 }

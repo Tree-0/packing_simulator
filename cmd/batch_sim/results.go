@@ -7,159 +7,64 @@ seeds.
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"os"
 	"sort"
 
 	"packing_simulator/backend"
 	"packing_simulator/backend/evaluator"
-	"packing_simulator/backend/policy"
-
-	"gopkg.in/yaml.v3"
+	"packing_simulator/internal/simconfig"
 )
 
-// configs to determine how the experiment will be run
-type experimentConfig struct {
-	Workloads  []workloadConfig `yaml:"workloads"`
-	Seeds      []int64          `yaml:"seeds"`
-	Policies   []string         `yaml:"policies"`
-	Evaluators []string         `yaml:"evaluators"`
-	Workers    int              `yaml:"workers"`
-}
-
-type workloadConfig struct {
-	Name       string           `yaml:"name"`
-	Simulation simulationConfig `yaml:"simulation"`
-}
+type experimentConfig = simconfig.ExperimentFile
+type workloadConfig = simconfig.ExperimentWorkload
+type simulationConfig = simconfig.WorkloadSimulation
+type containerSelectorConfig = simconfig.ContainerSelectorConfig
 
 type RunResult struct {
-	WorkloadName string
-	PolicyName   string
-	Seed         int64
-	Simulation   backend.SimulationResult
-	Evaluations  []evaluationResult
+	WorkloadName          string
+	PolicyName            string
+	ContainerSelectorName string
+	Seed                  int64
+	Simulation            backend.SimulationResult
+	Evaluations           []evaluationResult
 }
 
 // the unique key used to aggregate RunResults
 // into AggregateResults
 type AggregateKey struct {
-	WorkloadName   string
-	PolicyName     string
-	EvaluationType evaluator.EvaluationType
+	WorkloadName          string
+	PolicyName            string
+	ContainerSelectorName string
+	EvaluationType        evaluator.EvaluationType
 }
 
-// An aggregation of RunResult objects across all seeds
-// for that (Workload, Policy, Evaluation) group
+// AggregateResult is the mean of RunResults across seeds for one workload,
+// placement-policy, container-selector, and evaluation group.
 type AggregateResult struct {
-	WorkloadName string
-	PolicyName   string
-	Evaluation   evaluationResult
+	WorkloadName          string
+	PolicyName            string
+	ContainerSelectorName string
+	Evaluation            evaluationResult
 }
 
-// loadExperimentConfig reads and validates one experiment configuration file.
-// A relative path is interpreted relative to the process's current directory.
 func loadExperimentConfig(path string) (experimentConfig, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return experimentConfig{}, fmt.Errorf("open experiment config %q: %w", path, err)
-	}
-	defer file.Close()
-
-	decoder := yaml.NewDecoder(file)
-	decoder.KnownFields(true)
-
-	var config experimentConfig
-	if err := decoder.Decode(&config); err != nil {
-		return experimentConfig{}, fmt.Errorf("decode experiment config %q: %w", path, err)
-	}
-
-	var extraDocument any
-	if err := decoder.Decode(&extraDocument); err != io.EOF {
-		if err == nil {
-			return experimentConfig{}, fmt.Errorf("decode experiment config %q: multiple YAML documents are not supported", path)
-		}
-		return experimentConfig{}, fmt.Errorf("decode experiment config %q: %w", path, err)
-	}
-
-	if err := config.validate(); err != nil {
-		return experimentConfig{}, fmt.Errorf("invalid experiment config %q: %w", path, err)
-	}
-
-	return config, nil
-}
-
-func (config experimentConfig) validate() error {
-	if len(config.Workloads) == 0 {
-		return errors.New("at least one workload is required")
-	}
-	if len(config.Seeds) == 0 {
-		return errors.New("at least one seed is required")
-	}
-	if len(config.Policies) == 0 {
-		return errors.New("at least one policy is required")
-	}
-	if len(config.Evaluators) == 0 {
-		return errors.New("at least one evaluator is required")
-	}
-	if config.Workers < 0 {
-		return errors.New("workers cannot be negative")
-	}
-
-	workloadNames := make(map[string]struct{}, len(config.Workloads))
-	for _, workload := range config.Workloads {
-		if workload.Name == "" {
-			return errors.New("workload name is required")
-		}
-		if _, exists := workloadNames[workload.Name]; exists {
-			return fmt.Errorf("duplicate workload name %q", workload.Name)
-		}
-		workloadNames[workload.Name] = struct{}{}
-
-		if workload.Simulation.Iterations < 0 {
-			return fmt.Errorf("workload %q: simulation.iterations cannot be negative", workload.Name)
-		}
-		if _, err := backend.NewSimulationEngine(workload.Simulation.toBackendConfig(config.Seeds[0])); err != nil {
-			return fmt.Errorf("workload %q: simulation: %w", workload.Name, err)
-		}
-	}
-
-	for _, name := range config.Policies {
-		if _, err := policy.NewPolicy(name); err != nil {
-			return err
-		}
-	}
-	for _, name := range config.Evaluators {
-		if _, err := evaluator.ParseEvaluation(name); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return simconfig.LoadExperiment(path)
 }
 
 // Run multiple defined workloads as part of one experiment, and return the results
-// from each individual run. There are (Workloads * Policies * Seeds) distinct runs,
-// all of which receive every evaluation type defined in the config.
+// from each individual run. There are (Workloads * Placement Policies *
+// Container Selectors * Seeds) distinct runs, all of which receive every
+// evaluation type defined in the config.
 func runExperiment(config experimentConfig) ([]RunResult, error) {
-
-	totalSimulations := len(config.Workloads) * len(config.Policies) * len(config.Seeds)
-	runResults := make([]RunResult, 0, totalSimulations)
-
-	for _, workload := range config.Workloads {
-		workloadResults, err := runWorkload(workload, config)
-		if err != nil {
-			return nil, fmt.Errorf("run workload %q: %w", workload.Name, err)
-		}
-		runResults = append(runResults, workloadResults...)
+	specs, err := config.RunSpecs()
+	if err != nil {
+		return nil, err
 	}
-
-	return runResults, nil
+	return runSpecs(specs, config.Workers)
 }
 
-// Take in all RunResults and produce the aggregated results
-// by (workload, policy, evaluation)
+// Take in all RunResults and produce the aggregated results by (workload,
+// placement policy, container selector, evaluation).
 func AggregateResults(results []RunResult) ([]AggregateResult, error) {
 	if len(results) == 0 {
 		return make([]AggregateResult, 0), nil
@@ -170,9 +75,10 @@ func AggregateResults(results []RunResult) ([]AggregateResult, error) {
 	for _, result := range results {
 		for _, eval := range result.Evaluations {
 			key := AggregateKey{
-				result.WorkloadName,
-				result.PolicyName,
-				eval.evaluation,
+				WorkloadName:          result.WorkloadName,
+				PolicyName:            result.PolicyName,
+				ContainerSelectorName: result.ContainerSelectorName,
+				EvaluationType:        eval.evaluation,
 			}
 
 			aggregateBuckets[key] = append(
@@ -180,10 +86,11 @@ func AggregateResults(results []RunResult) ([]AggregateResult, error) {
 				// append a copy of the RunResult with only the single
 				// eval type we care about for this aggregate
 				RunResult{
-					WorkloadName: result.WorkloadName,
-					PolicyName:   result.PolicyName,
-					Seed:         result.Seed,
-					Evaluations:  []evaluationResult{eval},
+					WorkloadName:          result.WorkloadName,
+					PolicyName:            result.PolicyName,
+					ContainerSelectorName: result.ContainerSelectorName,
+					Seed:                  result.Seed,
+					Evaluations:           []evaluationResult{eval},
 				},
 			)
 		}
@@ -206,11 +113,12 @@ func AggregateResults(results []RunResult) ([]AggregateResult, error) {
 		aggregateResults = append(
 			aggregateResults,
 			AggregateResult{
-				key.WorkloadName,
-				key.PolicyName,
-				evaluationResult{
-					key.EvaluationType,
-					average,
+				WorkloadName:          key.WorkloadName,
+				PolicyName:            key.PolicyName,
+				ContainerSelectorName: key.ContainerSelectorName,
+				Evaluation: evaluationResult{
+					evaluation: key.EvaluationType,
+					value:      average,
 				},
 			},
 		)
@@ -239,6 +147,9 @@ func PrintRunResults(config experimentConfig, results []RunResult) {
 		if left.PolicyName != right.PolicyName {
 			return left.PolicyName < right.PolicyName
 		}
+		if left.ContainerSelectorName != right.ContainerSelectorName {
+			return left.ContainerSelectorName < right.ContainerSelectorName
+		}
 		return left.Seed < right.Seed
 	})
 
@@ -260,8 +171,9 @@ func PrintRunResults(config experimentConfig, results []RunResult) {
 		}
 
 		fmt.Printf(
-			"Policy: %s  Seed: %d\n",
+			"Placement policy: %s  Container selector: %s  Seed: %d\n",
 			result.PolicyName,
+			result.ContainerSelectorName,
 			result.Seed,
 		)
 		fmt.Printf(
@@ -311,12 +223,16 @@ func PrintAggregateResults(config experimentConfig, results []AggregateResult) {
 		if left.PolicyName != right.PolicyName {
 			return left.PolicyName < right.PolicyName
 		}
+		if left.ContainerSelectorName != right.ContainerSelectorName {
+			return left.ContainerSelectorName < right.ContainerSelectorName
+		}
 		return left.Evaluation.evaluation < right.Evaluation.evaluation
 	})
 
 	fmt.Println("Aggregate results (mean across seeds):")
 	currentWorkload := ""
 	currentPolicy := ""
+	currentContainerSelector := ""
 	for _, result := range sortedResults {
 		if result.WorkloadName != currentWorkload {
 			if currentWorkload != "" {
@@ -332,11 +248,18 @@ func PrintAggregateResults(config experimentConfig, results []AggregateResult) {
 			fmt.Println()
 			currentWorkload = result.WorkloadName
 			currentPolicy = ""
+			currentContainerSelector = ""
 		}
 
 		if result.PolicyName != currentPolicy {
-			fmt.Printf("Policy: %s\n", result.PolicyName)
+			fmt.Printf("Placement policy: %s\n", result.PolicyName)
 			currentPolicy = result.PolicyName
+			currentContainerSelector = ""
+		}
+
+		if result.ContainerSelectorName != currentContainerSelector {
+			fmt.Printf("Container selector: %s\n", result.ContainerSelectorName)
+			currentContainerSelector = result.ContainerSelectorName
 		}
 
 		switch result.Evaluation.evaluation {
