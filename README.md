@@ -21,7 +21,7 @@ Run randomized simulations over time, observe how each policy performs with each
 
 - `cmd/`
     - `simulate/main.go`: run individual simulations
-    - `visualize/main.go`: run and replay an individual simulation or experiment in a browser
+    - `visualize/main.go`: run and replay simulations/experiments in a browser
     - `batch_sim/main.go`: run experiments across seeds, placement policies, and container selectors, then aggregate results
 
 - `config/`
@@ -36,6 +36,7 @@ There are a few canonical versions of the [bin packing problem](http://en.wikipe
 - Online/Offline packing:
   - Online: items arrive one at a time, and placement decisions are irreversible (config `queue_size = 1`)
   - Offline: all items are known, and can be rearranged optimally (config `queue_size` equals `iterations`)
+  - You can get some intermediate scenario by choosing a `queue_size` in between `1` and `iterations`
 
 
 ### Running simulations
